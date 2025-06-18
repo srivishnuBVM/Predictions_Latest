@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pandas
+numpy
+scikit-learn
+openpyxl
+python-multipart
+pyarrow
+fastparquet
+snappy
+xlrd
+joblib
+typing
+python-dateutil
+xgboost
