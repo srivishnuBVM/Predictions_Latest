@@ -1010,7 +1010,7 @@
 ##aggregate code
 #Backend code
 #-------------------------------------------------------------------------------------------------------------
-# IMPORTS
+#IMPORTS
 from fastapi import FastAPI 
 from fastapi.middleware.cors import CORSMiddleware 
 from fastapi.responses import ORJSONResponse  
@@ -1034,6 +1034,7 @@ class Student(BaseModel):
     grade: str
     schoolName: str
     districtName: str
+    districtId : str
 
 class SchoolSummaryRequest(BaseModel):
     districtName: Optional[str] = None
@@ -1053,16 +1054,8 @@ class StudentTrend(BaseModel):
     value: int
     isPredicted: bool
 
-class AggregatedDistrictData(BaseModel):
-    attendance2024: float
-    predicted2025: float
-    predictedAttendance: Dict
-    metrics: List[StudentMetrics]
-    trend: List[StudentTrend]
-
 class StudentsResponse(BaseModel):
     students: List[Student]
-    aggregatedData: AggregatedDistrictData
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 # ON STARTUP, LOAD DATA
@@ -1076,8 +1069,6 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app with ORJSONResponse as default response class
 
 app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
-
-
 
 def load_and_process_data():
     global df, cached_students, cached_aggregated_data
@@ -1110,13 +1101,17 @@ def load_and_process_data():
 
         school_name = row.get("SCHOOL_NAME", "Unknown School")
         district_name = row.get("DISTRICT_NAME", "Unknown District")
+        location_id = int(row.get("LOCATION_ID", -1)) if "LOCATION_ID" in row else -1
+        district_id = int(row.get("DISTRICT_CODE",-1)) if "DISTRICT_CODE" in row else -1
+
 
         cached_students.append({
             "id": str(sid),
             "grade": grade_str,
-            # "locationId": location_id,
+            "districtId": district_id,
+            "districtName": district_name,
+            "locationId": location_id,
             "schoolName": school_name,
-            "districtName": district_name
         })
 
     cached_students.sort(key=lambda x: x["id"])
@@ -1133,8 +1128,7 @@ def get_students():
     print(f"Aggregated Data Available: {bool(cached_aggregated_data)}")
     
     return {
-        "students": cached_students[:100000],
-        "aggregatedData": cached_aggregated_data
+        "students": cached_students[:100000]
     }
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1556,7 +1550,7 @@ def get_student_summary(req: SchoolSummaryRequest):
         subset = subset[subset["SCHOOL_NAME"].str.strip().str.lower() == req.schoolName.strip().lower()]
     if req.studentId:
         subset = subset[subset["STUDENT_ID"] == req.studentId]
-    if req.grade != -3:
+    elif req.grade != -3:
         subset = subset[subset["STUDENT_GRADE_LEVEL"] == req.grade]
 
     if subset.empty:
@@ -1666,3 +1660,420 @@ app.add_middleware(
 #---------------------------------------------------------------------------------------------------------------------------------------------------------
 # Run the app using: uvicorn backend.Prediction_Latest:app --reload
 
+# from fastapi import FastAPI 
+# from fastapi.middleware.cors import CORSMiddleware 
+# from fastapi.responses import ORJSONResponse  
+# from contextlib import asynccontextmanager
+# import pandas as pd
+# import numpy as np
+# from pydantic import BaseModel
+# from typing import List, Dict, Optional, Tuple
+# import re
+# import threading
+# from enum import Enum
+
+# # Global variables
+# df = None            
+# cached_students = []  
+# cached_aggregated_data = {}
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # ENUMS AND CONSTANTS
+
+# class AnalysisLevel(Enum):
+#     ALL_DISTRICTS = "all_districts"
+#     DISTRICT = "district" 
+#     SCHOOL = "school"
+#     GRADE = "grade"
+#     STUDENT = "student"
+
+# YEAR_RANGE = range(2019, 2025)
+# CURRENT_YEAR = 2024
+# PREDICTION_YEAR = 2025
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # CLASS MODELS
+
+# class Student(BaseModel):
+#     id: str
+#     locationId: int
+#     grade: str
+#     schoolName: str
+#     districtName: str
+
+# class SchoolSummaryRequest(BaseModel):
+#     districtName: Optional[str] = None
+#     schoolName: Optional[str] = None
+#     studentId: Optional[int] = None
+#     grade: Optional[int] = -3
+
+# class StudentMetrics(BaseModel):
+#     year: str
+#     attendanceRate: Optional[int]
+#     unexcused: Optional[float]
+#     present: Optional[float]
+#     total: Optional[int]
+
+# class StudentTrend(BaseModel):
+#     year: str
+#     value: int
+#     isPredicted: bool
+
+# class AggregatedDistrictData(BaseModel):
+#     attendance2024: float
+#     predicted2025: float
+#     predictedAttendance: Dict
+#     metrics: List[StudentMetrics]
+#     trend: List[StudentTrend]
+
+# class StudentsResponse(BaseModel):
+#     students: List[Student]
+#     aggregatedData: AggregatedDistrictData
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # UTILITY FUNCTIONS
+
+# def get_grade_string(grade_num) -> str:
+#     """Convert numeric grade to readable string format"""
+#     if pd.isna(grade_num):
+#         return "Unknown Grade"
+    
+#     grade = int(grade_num)
+#     if grade == -1:
+#         return 'Pre-Kindergarten'
+#     elif grade == 0:
+#         return "Kindergarten"
+#     elif grade == 1:
+#         return "1st Grade"
+#     elif grade == 2:
+#         return "2nd Grade"
+#     elif grade == 3:
+#         return "3rd Grade"
+#     elif grade >= 11:
+#         return f"{grade}th Grade"
+#     else:
+#         suffix = {1: "st", 2: "nd", 3: "rd"}.get(grade % 10, "th")
+#         return f"{grade}{suffix} Grade"
+
+# def safe_round(value, decimals=1):
+#     """Safely round a value, handling NaN cases"""
+#     return round(float(value), decimals) if pd.notna(value) else None
+
+# def safe_int_round(value):
+#     """Safely round to integer, handling NaN cases"""
+#     return int(round(float(value))) if pd.notna(value) else None
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # DATA FILTERING FUNCTIONS
+
+# def apply_filters(df: pd.DataFrame, req: SchoolSummaryRequest) -> pd.DataFrame:
+#     """Apply filters to dataframe based on request parameters"""
+#     subset = df.copy()
+    
+#     if req.districtName:
+#         subset = subset[subset["DISTRICT_NAME"].str.strip().str.lower() == req.districtName.strip().lower()]
+    
+#     if req.schoolName:
+#         subset = subset[subset["SCHOOL_NAME"].str.strip().str.lower() == req.schoolName.strip().lower()]
+    
+#     if req.studentId:
+#         subset = subset[subset["STUDENT_ID"] == req.studentId]
+    
+#     if req.grade != -3:
+#         subset = subset[subset["STUDENT_GRADE_LEVEL"] == req.grade]
+    
+#     return subset
+
+# def get_latest_per_student(df: pd.DataFrame) -> pd.DataFrame:
+#     """Get latest record per student"""
+#     return (df.sort_values(by=["STUDENT_ID", "SCHOOL_YEAR"])
+#              .groupby("STUDENT_ID")
+#              .tail(1))
+
+# def validate_data(subset: pd.DataFrame, year_data: pd.DataFrame, context: str) -> Optional[str]:
+#     """Validate data and return error message if invalid"""
+#     if subset.empty:
+#         return "No matching data found"
+    
+#     if year_data.empty:
+#         return f"No {CURRENT_YEAR} data found in this {context}."
+    
+#     return None
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # CALCULATION FUNCTIONS
+
+# def calculate_attendance_rate(present_days: pd.Series, enrolled_days: pd.Series) -> float:
+#     """Calculate attendance rate from present and enrolled days"""
+#     present_sum = present_days.astype(float).sum()
+#     enrolled_sum = enrolled_days.astype(float).sum()
+#     return round((present_sum / enrolled_sum) * 100, 1) if enrolled_sum > 0 else 0
+
+# def get_aggregate_column(level: AnalysisLevel) -> str:
+#     """Get the appropriate aggregate column based on analysis level"""
+#     aggregate_mapping = {
+#         AnalysisLevel.ALL_DISTRICTS: "District_aggregate",
+#         AnalysisLevel.DISTRICT: "District_aggregate", 
+#         AnalysisLevel.SCHOOL: "School_aggregate",
+#         AnalysisLevel.GRADE: "Grade_aggregate",
+#         AnalysisLevel.STUDENT: "District_aggregate"  # Students use district aggregate
+#     }
+#     return aggregate_mapping[level]
+
+# def calculate_prediction(latest_data: pd.DataFrame, level: AnalysisLevel) -> float:
+#     """Calculate 2025 prediction based on analysis level"""
+#     aggregate_col = get_aggregate_column(level)
+    
+#     if level == AnalysisLevel.ALL_DISTRICTS:
+#         # For all districts, use mean of all district aggregates
+#         all_predictions = latest_data[aggregate_col].dropna()
+#         if not all_predictions.empty:
+#             return round(all_predictions.mean() * 100, 1)
+#         # Fallback to individual predictions
+#         return round(latest_data["Predictions"].astype(float).mean() * 100, 1)
+#     else:
+#         # For specific contexts, use the aggregate value
+#         aggregate_value = latest_data[aggregate_col].iloc[0]
+#         if pd.notna(aggregate_value):
+#             return round(float(aggregate_value) * 100, 1)
+#         # Fallback to individual predictions mean
+#         return round(latest_data["Predictions"].astype(float).mean() * 100, 1)
+
+# def generate_metrics(subset: pd.DataFrame, level: AnalysisLevel) -> List[StudentMetrics]:
+#     """Generate metrics for all years based on analysis level"""
+#     metrics = []
+    
+#     for year in YEAR_RANGE:
+#         year_data = subset[subset["SCHOOL_YEAR"] == year]
+#         if year_data.empty:
+#             continue
+
+#         # Calculate attendance rate
+#         present_sum = year_data["Total_Days_Present"].astype(float).sum()
+#         enrolled_sum = year_data["Total_Days_Enrolled"].astype(float).sum()
+#         attendance_rate = safe_int_round((present_sum / enrolled_sum) * 100) if enrolled_sum > 0 else None
+        
+#         # Calculate other metrics
+#         if level == AnalysisLevel.STUDENT:
+#             # For individual students, use actual values not means
+#             unexcused = safe_int_round(year_data["Total_Days_Unexcused_Absent"].values[0]) if year_data["Total_Days_Unexcused_Absent"].notna().any() else None
+#             present = safe_int_round(year_data["Total_Days_Present"].values[0])
+#             total = safe_int_round(year_data["Total_Days_Enrolled"].values[0])
+#         else:
+#             # For aggregated levels, use means
+#             unexcused = safe_int_round(year_data["Total_Days_Unexcused_Absent"].astype(float).mean()) if year_data["Total_Days_Unexcused_Absent"].notna().any() else None
+#             present = safe_int_round(year_data["Total_Days_Present"].astype(float).mean())
+#             total = safe_int_round(year_data["Total_Days_Enrolled"].astype(float).mean())
+
+#         metrics.append(StudentMetrics(
+#             year=str(year),
+#             attendanceRate=attendance_rate,
+#             unexcused=unexcused,
+#             present=present,
+#             total=total
+#         ))
+    
+#     return metrics
+
+# def generate_trend(subset: pd.DataFrame, latest_data: pd.DataFrame, level: AnalysisLevel) -> List[StudentTrend]:
+#     """Generate trend data for all years plus prediction"""
+#     trend = []
+    
+#     # Historical trends
+#     for year in YEAR_RANGE:
+#         year_data = subset[subset["SCHOOL_YEAR"] == year]
+#         if year_data.empty:
+#             continue
+
+#         present_sum = year_data["Total_Days_Present"].astype(float).sum()
+#         enrolled_sum = year_data["Total_Days_Enrolled"].astype(float).sum()
+
+#         if enrolled_sum > 0:
+#             avg_attendance = (present_sum / enrolled_sum) * 100
+#             trend.append(StudentTrend(
+#                 year=str(year),
+#                 value=int(round(avg_attendance)),
+#                 isPredicted=False
+#             ))
+
+#     # Add prediction
+#     aggregate_col = get_aggregate_column(level)
+    
+#     if level == AnalysisLevel.ALL_DISTRICTS:
+#         all_predictions = latest_data[aggregate_col].dropna()
+#         if not all_predictions.empty:
+#             prediction_value = int(round(all_predictions.mean() * 100))
+#         else:
+#             prediction_value = int(round(latest_data["Predictions"].astype(float).mean() * 100))
+#     else:
+#         aggregate_value = latest_data[aggregate_col].iloc[0] if not latest_data.empty else None
+#         if pd.notna(aggregate_value):
+#             prediction_value = int(round(float(aggregate_value) * 100))
+#         else:
+#             # Fallback for student level
+#             if level == AnalysisLevel.STUDENT and "Predictions" in latest_data.columns:
+#                 prediction_value = int(round(latest_data["Predictions"].iloc[0] * 100))
+#             else:
+#                 prediction_value = int(round(latest_data["Predictions"].astype(float).mean() * 100))
+    
+#     trend.append(StudentTrend(
+#         year=str(PREDICTION_YEAR),
+#         value=prediction_value,
+#         isPredicted=True
+#     ))
+    
+#     return trend
+
+# def build_response(subset: pd.DataFrame, latest_data: pd.DataFrame, level: AnalysisLevel, context: str = "scope") -> dict:
+#     """Build standardized response for all endpoints"""
+#     # Get 2024 data
+#     if level == AnalysisLevel.STUDENT:
+#         year_2024_data = subset[subset["SCHOOL_YEAR"] == CURRENT_YEAR]
+#     else:
+#         year_2024_data = latest_data[latest_data["SCHOOL_YEAR"] == CURRENT_YEAR]
+    
+#     # Validate data
+#     error_msg = validate_data(subset, year_2024_data, context)
+#     if error_msg:
+#         return {"message": error_msg}
+    
+#     # Calculate 2024 attendance
+#     present_days = year_2024_data["Total_Days_Present"].astype(float)
+#     enrolled_days = year_2024_data["Total_Days_Enrolled"].astype(float)
+#     attendance_2024 = calculate_attendance_rate(present_days, enrolled_days)
+    
+#     # Calculate prediction
+#     predicted_2025 = calculate_prediction(latest_data, level)
+    
+#     # Calculate average total days
+#     total_days = safe_round(enrolled_days.mean())
+    
+#     # Generate metrics and trends
+#     metrics = generate_metrics(subset, level)
+#     trend = generate_trend(subset, latest_data, level)
+    
+#     return {
+#         "attendance2024": attendance_2024,
+#         "predicted2025": predicted_2025,
+#         "predictedAttendance": {
+#             "year": str(PREDICTION_YEAR),
+#             "attendanceRate": predicted_2025,
+#             "total": total_days
+#         },
+#         "metrics": sorted(metrics, key=lambda x: x.year),
+#         "trend": sorted(trend, key=lambda x: x.year)
+#     }
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # DATA LOADING AND PROCESSING
+
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     background_thread = threading.Thread(target=load_and_process_data)
+#     background_thread.daemon = True
+#     background_thread.start()
+#     yield
+
+# def load_and_process_data():
+#     global df, cached_students, cached_aggregated_data
+#     df = pd.read_parquet("Data/students_agg.parquet")
+#     cached_students = []  
+    
+#     # Process student data
+#     for sid in df['STUDENT_ID'].unique():
+#         row = df[df['STUDENT_ID'] == sid].iloc[-1]
+#         sid = int(row["STUDENT_ID"])
+#         grade = row.get("STUDENT_GRADE_LEVEL", np.nan)
+#         grade_str = get_grade_string(grade)
+#         school_name = row.get("SCHOOL_NAME", "Unknown School")
+#         district_name = row.get("DISTRICT_NAME", "Unknown District")
+
+#         cached_students.append({
+#             "id": str(sid),
+#             "grade": grade_str,
+#             "schoolName": school_name,
+#             "districtName": district_name
+#         })
+
+#     cached_students.sort(key=lambda x: x["id"])
+#     return cached_students, df
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # FASTAPI APP SETUP
+
+# app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["http://localhost:8080"],
+#     allow_credentials=False,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# #---------------------------------------------------------------------------------------------------------------------------------------------------------------
+# # API ENDPOINTS
+
+# @app.get("/students")
+# def get_students():
+#     print(f"Cached Students: {len(cached_students)}")
+#     print(f"Aggregated Data Available: {bool(cached_aggregated_data)}")
+    
+#     return {
+#         "students": cached_students[:100000],
+#         "aggregatedData": cached_aggregated_data
+#     }
+
+# @app.get("/AllDistrictsData")
+# def get_all_districts_summary():
+#     """Get aggregated data across all districts"""
+#     global df
+    
+#     if df is None or df.empty:
+#         return {"message": "No data available"}
+    
+#     subset = df.copy()
+#     latest_per_student = get_latest_per_student(subset)
+    
+#     return build_response(subset, latest_per_student, AnalysisLevel.ALL_DISTRICTS, "all districts")
+
+# @app.post("/DistrictData/ByFilters")
+# def get_district_summary(req: SchoolSummaryRequest):
+#     global df
+    
+#     # Only support district-level filtering for this endpoint
+#     if not req.districtName or req.schoolName or req.studentId or req.grade != -3:
+#         return {"message": "Only district-level filter is supported in this version."}
+    
+#     subset = apply_filters(df, req)
+#     latest_per_student = get_latest_per_student(subset)
+    
+#     return build_response(subset, latest_per_student, AnalysisLevel.DISTRICT, "district")
+
+# @app.post("/SchoolData/ByFilters")
+# def get_school_summary(req: SchoolSummaryRequest):
+#     global df
+    
+#     subset = apply_filters(df, req)
+#     latest_per_student = get_latest_per_student(subset)
+    
+#     return build_response(subset, latest_per_student, AnalysisLevel.SCHOOL, "school")
+
+# @app.post("/GradeDetails/ByFilters")
+# def get_grade_summary(req: SchoolSummaryRequest):
+#     global df
+    
+#     subset = apply_filters(df, req)
+#     latest_per_student = get_latest_per_student(subset)
+    
+#     return build_response(subset, latest_per_student, AnalysisLevel.GRADE, "grade scope")
+
+# @app.post("/StudentDetails/ByFilters")
+# def get_student_summary(req: SchoolSummaryRequest):
+#     global df
+    
+#     subset = apply_filters(df, req)
+#     # For student level, we work with the full subset, not just latest per student
+#     latest_row = subset.sort_values(by="SCHOOL_YEAR").iloc[-1:] if not subset.empty else pd.DataFrame()
+    
+#     return build_response(subset, latest_row, AnalysisLevel.STUDENT, "student scope")

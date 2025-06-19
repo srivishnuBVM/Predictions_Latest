@@ -2321,6 +2321,465 @@
 // };
 
 
+// import React, { useMemo } from "react";
+// import { Student } from "@/types";
+// import { Button } from "@/components/ui/button";
+// import {
+//   DropdownMenu,
+//   DropdownMenuContent,
+//   DropdownMenuItem,
+//   DropdownMenuTrigger,
+// } from "@/components/ui/dropdown-menu";
+// import { Check, ChevronDown, X, Info } from "lucide-react";
+
+// interface Props {
+//   students: Student[];
+//   selectedStudent: Student | null;
+//   onSelect: (s: Student | null) => void;
+//   onFiltersChange: (filters: {
+//     district: string | null;
+//     school: string | null;
+//     grade: string | null;
+//     student: Student | null;
+//   }) => void;
+//   selectedDistrict: string | null;
+//   selectedSchool: string | null;
+//   selectedGrade: string | null;
+// }
+
+// const gradeOrder = [
+//   "Pre-Kindergarten", "Kindergarten", "1st Grade", "2nd Grade", "3rd Grade",
+//   "4th Grade", "5th Grade", "6th Grade", "7th Grade", "8th Grade",
+//   "9th Grade", "10th Grade", "11th Grade", "12th Grade",
+// ];
+
+// export const StudentSelector: React.FC<Props> = ({
+//   students,
+//   selectedStudent,
+//   onSelect,
+//   onFiltersChange,
+//   selectedDistrict,
+//   selectedSchool,
+//   selectedGrade,
+// }) => {
+//   // Memoized computed values
+//   const {
+//     districtNames,
+//     schoolNames,
+//     availableGrades,
+//     filteredStudents,
+//     activeFiltersCount,
+//     currentApiLevel,
+//     selectionPath
+//   } = useMemo(() => {
+//     // Determine selection path
+//     let path = "None";
+//     if (selectedDistrict && selectedSchool) {
+//       path = "District→School";
+//     } else if (selectedDistrict && !selectedSchool) {
+//       path = "District Only";
+//     } else if (!selectedDistrict && selectedSchool) {
+//       path = "Direct School";
+//     }
+
+//     // Get all districts and schools for independent selection
+//     const allDistricts = Array.from(new Set(students.map(s => s.districtName))).sort();
+//     const allSchools = Array.from(new Set(students.map(s => s.schoolName))).sort();
+
+//     // Filter logic based on selection path
+//     let filteredByLocation = students;
+//     let schoolOptions = allSchools;
+    
+//     if (selectedDistrict && selectedSchool) {
+//       // Both selected - filter by both
+//       filteredByLocation = students.filter(s => 
+//         s.districtName === selectedDistrict && s.schoolName === selectedSchool
+//       );
+//     } else if (selectedDistrict && !selectedSchool) {
+//       // District only - filter by district, show schools from district
+//       filteredByLocation = students.filter(s => s.districtName === selectedDistrict);
+//       schoolOptions = Array.from(new Set(filteredByLocation.map(s => s.schoolName))).sort();
+//     } else if (!selectedDistrict && selectedSchool) {
+//       // School only - filter by school
+//       filteredByLocation = students.filter(s => s.schoolName === selectedSchool);
+//     }
+//     // If neither selected, show all students
+
+//     // Filter by grade
+//     const finalFilteredStudents = selectedGrade
+//       ? filteredByLocation.filter(s => s.grade === selectedGrade)
+//       : filteredByLocation;
+
+//     // Available grades based on current location filter
+//     const grades = Array.from(new Set(filteredByLocation.map(s => s.grade)))
+//       .sort((a, b) => gradeOrder.indexOf(a) - gradeOrder.indexOf(b));
+
+//     // Determine current API level
+//     let apiLevel = "None";
+//     if (selectedStudent) {
+//       apiLevel = "Student";
+//     } else if (selectedGrade && (selectedDistrict || selectedSchool)) {
+//       apiLevel = "Grade";
+//     } else if (selectedSchool && selectedDistrict) {
+//       apiLevel = "School";
+//     } else if (selectedDistrict) {
+//       apiLevel = "District";
+//     }
+
+//     return {
+//       districtNames: allDistricts,
+//       schoolNames: schoolOptions,
+//       availableGrades: grades,
+//       filteredStudents: finalFilteredStudents.sort((a, b) => {
+//         if (a.schoolName !== b.schoolName) return a.schoolName.localeCompare(b.schoolName);
+//         const gradeAIndex = gradeOrder.indexOf(a.grade);
+//         const gradeBIndex = gradeOrder.indexOf(b.grade);
+//         if (gradeAIndex !== gradeBIndex) return gradeAIndex - gradeBIndex;
+//         return a.id.localeCompare(b.id);
+//       }),
+//       activeFiltersCount: [selectedDistrict, selectedSchool, selectedGrade, selectedStudent]
+//         .filter(Boolean).length,
+//       currentApiLevel: apiLevel,
+//       selectionPath: path
+//     };
+//   }, [students, selectedDistrict, selectedSchool, selectedGrade, selectedStudent]);
+
+//   // Simplified update function
+//   const updateFilters = (updates: Partial<{
+//     district: string | null;
+//     school: string | null;
+//     grade: string | null;
+//     student: Student | null;
+//   }>) => {
+//     const newFilters = {
+//       district: updates.district !== undefined ? updates.district : selectedDistrict,
+//       school: updates.school !== undefined ? updates.school : selectedSchool,
+//       grade: updates.grade !== undefined ? updates.grade : selectedGrade,
+//       student: updates.student !== undefined ? updates.student : selectedStudent,
+//     };
+
+//     onFiltersChange(newFilters);
+//     if (updates.student !== undefined) {
+//       onSelect(newFilters.student);
+//     }
+//   };
+
+//   const clearAllFilters = () => updateFilters({
+//     district: null,
+//     school: null,
+//     grade: null,
+//     student: null,
+//   });
+
+//   // Handle district selection
+//   const handleDistrictSelect = (district: string | null) => {
+//     if (district) {
+//       // If selecting a district, clear school, grade, and student
+//       updateFilters({ 
+//         district, 
+//         school: null, 
+//         grade: null, 
+//         student: null 
+//       });
+//     } else {
+//       // If clearing district, keep other selections if they're still valid
+//       updateFilters({ district: null });
+//     }
+//   };
+
+//   // Handle school selection
+//   const handleSchoolSelect = (school: string | null) => {
+//     if (school) {
+//       // If selecting a school, clear grade and student, but keep district if it matches
+//       const schoolDistrict = students.find(s => s.schoolName === school)?.districtName;
+      
+//       if (selectedDistrict && schoolDistrict === selectedDistrict) {
+//         // Keep district if it matches the school's district
+//         updateFilters({ 
+//           school, 
+//           grade: null, 
+//           student: null 
+//         });
+//       } else {
+//         // Clear district if it doesn't match or wasn't selected
+//         updateFilters({ 
+//           district: null,
+//           school, 
+//           grade: null, 
+//           student: null 
+//         });
+//       }
+//     } else {
+//       // If clearing school, clear dependent selections
+//       updateFilters({ 
+//         school: null, 
+//         grade: null, 
+//         student: null 
+//       });
+//     }
+//   };
+
+//   // Reusable dropdown component
+//   const FilterDropdown = ({ 
+//     label, 
+//     value, 
+//     placeholder, 
+//     options, 
+//     onSelect, 
+//     disabled = false,
+//     disabledReason
+//   }: {
+//     label: string;
+//     value: string | null;
+//     placeholder: string;
+//     options: string[];
+//     onSelect: (value: string | null) => void;
+//     disabled?: boolean;
+//     disabledReason?: string;
+//   }) => (
+//     <div className="space-y-2">
+//       <label className={`block text-base font-semibold ${disabled ? 'text-gray-400' : 'text-gray-700'}`}>
+//         {label}
+//         {disabled && disabledReason && (
+//           <span className="ml-2 text-xs text-gray-500">({disabledReason})</span>
+//         )}
+//       </label>
+//       <DropdownMenu>
+//         <DropdownMenuTrigger asChild>
+//           <Button 
+//             variant="outline" 
+//             disabled={disabled}
+//             className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
+//               value ? 'ring-2 ring-blue-200 border-blue-300' : ''
+//             } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+//           >
+//             <span className="truncate">{value || placeholder}</span>
+//             <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+//           </Button>
+//         </DropdownMenuTrigger>
+//         {!disabled && (
+//           <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
+//             <DropdownMenuItem
+//               onClick={() => onSelect(null)}
+//               className="text-base py-2 cursor-pointer text-gray-500"
+//             >
+//               <div className="flex items-center w-full">
+//                 <span className="mr-2 w-4">{!value && <Check className="h-4 w-4" />}</span>
+//                 All {label}s
+//               </div>
+//             </DropdownMenuItem>
+//             {options.length === 0 ? (
+//               <DropdownMenuItem disabled className="text-base py-2">
+//                 No {label.toLowerCase()}s available
+//               </DropdownMenuItem>
+//             ) : (
+//               options.map((option) => (
+//                 <DropdownMenuItem
+//                   key={option}
+//                   onClick={() => onSelect(option)}
+//                   className="text-base py-2 cursor-pointer"
+//                 >
+//                   <div className="flex items-center w-full">
+//                     <span className="mr-2 w-4">
+//                       {value === option && <Check className="h-4 w-4" />}
+//                     </span>
+//                     {option}
+//                   </div>
+//                 </DropdownMenuItem>
+//               ))
+//             )}
+//           </DropdownMenuContent>
+//         )}
+//       </DropdownMenu>
+//     </div>
+//   );
+
+//   return (
+//     <div className="space-y-6">
+//       {/* Current Selection Info */}
+//       <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+//         <div className="flex items-center gap-2 mb-2">
+//           <Info className="h-4 w-4 text-blue-600" />
+//           <span className="text-sm font-semibold text-blue-800">Data Level: {currentApiLevel}</span>
+//         </div>
+//         <div className="text-xs text-blue-700 mb-1">
+//           {currentApiLevel === "Student" && "Individual student data"}
+//           {currentApiLevel === "Grade" && "Aggregated data for specific grade"}
+//           {currentApiLevel === "School" && "Aggregated data for entire school"}
+//           {currentApiLevel === "District" && "Aggregated data for entire district"}
+//           {currentApiLevel === "None" && "No data will be loaded"}
+//         </div>
+//         {selectionPath !== "None" && (
+//           <div className="text-xs text-blue-600 font-medium">
+//             Selection Path: {selectionPath}
+//           </div>
+//         )}
+//       </div>
+
+//       {/* Clear All Button */}
+//       {activeFiltersCount > 0 && (
+//         <div className="flex justify-between items-center">
+//           <span className="text-sm text-gray-600">
+//             {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
+//           </span>
+//           <Button
+//             variant="ghost"
+//             size="sm"
+//             onClick={clearAllFilters}
+//             className="text-red-600 hover:text-red-700 hover:bg-red-50"
+//           >
+//             <X className="h-4 w-4 mr-1" />
+//             Clear All
+//           </Button>
+//         </div>
+//       )}
+
+//       {/* District Filter */}
+//       <FilterDropdown
+//         label="District"
+//         value={selectedDistrict}
+//         placeholder="Select district"
+//         options={districtNames}
+//         onSelect={handleDistrictSelect}
+//       />
+
+//       {/* School Filter */}
+//       <FilterDropdown
+//         label="School"
+//         value={selectedSchool}
+//         placeholder="Select school"
+//         options={schoolNames}
+//         onSelect={handleSchoolSelect}
+//       />
+
+//       {/* Grade Filter */}
+//       <FilterDropdown
+//         label="Grade"
+//         value={selectedGrade}
+//         placeholder="Select grade"
+//         options={availableGrades}
+//         disabled={!selectedDistrict && !selectedSchool}
+//         disabledReason={!selectedDistrict && !selectedSchool ? "Select district or school first" : ""}
+//         onSelect={(grade) => updateFilters({ 
+//           grade, 
+//           student: null 
+//         })}
+//       />
+
+//       {/* Student Dropdown - Special case with additional info */}
+//       <div className="space-y-2">
+//         <label className={`block text-base font-semibold ${
+//           (!selectedDistrict && !selectedSchool && !selectedGrade) ? 'text-gray-400' : 'text-gray-700'
+//         }`}>
+//           Student
+//           {(!selectedDistrict && !selectedSchool && !selectedGrade) && (
+//             <span className="ml-2 text-xs text-gray-500">(Select filters first)</span>
+//           )}
+//         </label>
+//         <DropdownMenu>
+//           <DropdownMenuTrigger asChild>
+//             <Button
+//               variant="outline"
+//               disabled={!selectedDistrict && !selectedSchool && !selectedGrade}
+//               className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
+//                 selectedStudent ? 'ring-2 ring-blue-200 border-blue-300' : ''
+//               } ${(!selectedDistrict && !selectedSchool && !selectedGrade) ? 'opacity-50 cursor-not-allowed' : ''}`}
+//             >
+//               <span className="truncate">
+//                 {selectedStudent?.id || "Select student"}
+//               </span>
+//               <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+//             </Button>
+//           </DropdownMenuTrigger>
+//           {(selectedDistrict || selectedSchool || selectedGrade) && (
+//             <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
+//               <DropdownMenuItem
+//                 onClick={() => updateFilters({ student: null })}
+//                 className="text-base py-2 cursor-pointer text-gray-500"
+//               >
+//                 <div className="flex items-center w-full">
+//                   <span className="mr-2 w-4">
+//                     {!selectedStudent && <Check className="h-4 w-4" />}
+//                   </span>
+//                   No specific student
+//                 </div>
+//               </DropdownMenuItem>
+//               {filteredStudents.length === 0 ? (
+//                 <DropdownMenuItem disabled className="text-base py-2">
+//                   No students available
+//                 </DropdownMenuItem>
+//               ) : (
+//                 filteredStudents.map((s) => (
+//                   <DropdownMenuItem
+//                     key={s.id}
+//                     onClick={() => updateFilters({ student: s })}
+//                     className="text-base py-2 cursor-pointer"
+//                   >
+//                     <div className="flex items-center justify-between w-full">
+//                       <div className="flex items-center">
+//                         <span className="mr-2 w-4">
+//                           {selectedStudent?.id === s.id && <Check className="h-4 w-4" />}
+//                         </span>
+//                         {s.id}
+//                       </div>
+//                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+//                         {s.grade}
+//                       </span>
+//                     </div>
+//                   </DropdownMenuItem>
+//                 ))
+//               )}
+//             </DropdownMenuContent>
+//           )}
+//         </DropdownMenu>
+//       </div>
+
+//       {/* Current Selection Summary */}
+//       {activeFiltersCount > 0 && (
+//         <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+//           <h4 className="font-semibold text-sm text-green-800 mb-2">Current Selection:</h4>
+//           <div className="space-y-1 text-sm text-green-700">
+//             {selectedDistrict && <div>District: <span className="font-medium">{selectedDistrict}</span></div>}
+//             {selectedSchool && <div>School: <span className="font-medium">{selectedSchool}</span></div>}
+//             {selectedGrade && <div>Grade: <span className="font-medium">{selectedGrade}</span></div>}
+//             {selectedStudent && <div>Student: <span className="font-medium">{selectedStudent.id}</span></div>}
+//             {!selectedStudent && (selectedDistrict || selectedSchool || selectedGrade) && (
+//               <div className="text-green-600 font-medium">
+//                 API Endpoint: /{currentApiLevel}Data/ByFilters
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Filter Selection Guidance */}
+//       {currentApiLevel === "None" && (
+//         <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+//           <h4 className="font-semibold text-sm text-yellow-800 mb-2">Selection Guide:</h4>
+//           <div className="space-y-1 text-xs text-yellow-700">
+//             <div>• <strong>District only:</strong> View district-wide attendance data</div>
+//             <div>• <strong>School only:</strong> View specific school data (direct access)</div>
+//             <div>• <strong>District + School:</strong> View specific school data (hierarchical)</div>
+//             <div>• <strong>District/School + Grade:</strong> View grade-level data</div>
+//             <div>• <strong>Any filters + Student:</strong> View individual student data</div>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* Data Summary */}
+//       {activeFiltersCount > 0 && filteredStudents.length > 0 && !selectedStudent && (
+//         <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+//           <h4 className="font-semibold text-sm text-gray-700 mb-1">Data Summary:</h4>
+//           <div className="text-xs text-gray-600">
+//             {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''} match your current filters
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
+
+
 import React, { useMemo } from "react";
 import { Student } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -2337,13 +2796,13 @@ interface Props {
   selectedStudent: Student | null;
   onSelect: (s: Student | null) => void;
   onFiltersChange: (filters: {
-    district: string | null;
-    school: string | null;
+    districtId: number | null;
+    locationId: number | null;
     grade: string | null;
     student: Student | null;
   }) => void;
-  selectedDistrict: string | null;
-  selectedSchool: string | null;
+  selectedDistrictId: number | null;
+  selectedLocationId: number | null;
   selectedGrade: string | null;
 }
 
@@ -2358,14 +2817,14 @@ export const StudentSelector: React.FC<Props> = ({
   selectedStudent,
   onSelect,
   onFiltersChange,
-  selectedDistrict,
-  selectedSchool,
+  selectedDistrictId,
+  selectedLocationId,
   selectedGrade,
 }) => {
-  // Memoized computed values
+  // Memoized computed values with ID-based deduplication
   const {
-    districtNames,
-    schoolNames,
+    districts,
+    schools,
     availableGrades,
     filteredStudents,
     activeFiltersCount,
@@ -2374,36 +2833,65 @@ export const StudentSelector: React.FC<Props> = ({
   } = useMemo(() => {
     // Determine selection path
     let path = "None";
-    if (selectedDistrict && selectedSchool) {
+    if (selectedDistrictId && selectedLocationId) {
       path = "District→School";
-    } else if (selectedDistrict && !selectedSchool) {
+    } else if (selectedDistrictId && !selectedLocationId) {
       path = "District Only";
-    } else if (!selectedDistrict && selectedSchool) {
+    } else if (!selectedDistrictId && selectedLocationId) {
       path = "Direct School";
     }
 
-    // Get all districts and schools for independent selection
-    const allDistricts = Array.from(new Set(students.map(s => s.districtName))).sort();
-    const allSchools = Array.from(new Set(students.map(s => s.schoolName))).sort();
+    // Create deduplicated districts using Map with ID as key
+    const districtMap = new Map();
+    students.forEach(s => {
+      if (!districtMap.has(s.districtId)) {
+        districtMap.set(s.districtId, {
+          id: s.districtId,
+          name: s.districtName
+        });
+      }
+    });
+    const allDistricts = Array.from(districtMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Filter logic based on selection path
+    // Create deduplicated schools using Map with ID as key
+    const schoolMap = new Map();
+    students.forEach(s => {
+      if (!schoolMap.has(s.locationId)) {
+        schoolMap.set(s.locationId, {
+          id: s.locationId,
+          name: s.schoolName
+        });
+      }
+    });
+    const allSchools = Array.from(schoolMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Filter students based on selected IDs
     let filteredByLocation = students;
     let schoolOptions = allSchools;
     
-    if (selectedDistrict && selectedSchool) {
-      // Both selected - filter by both
+    if (selectedDistrictId && selectedLocationId) {
       filteredByLocation = students.filter(s => 
-        s.districtName === selectedDistrict && s.schoolName === selectedSchool
+        s.districtId === selectedDistrictId && s.locationId === selectedLocationId
       );
-    } else if (selectedDistrict && !selectedSchool) {
-      // District only - filter by district, show schools from district
-      filteredByLocation = students.filter(s => s.districtName === selectedDistrict);
-      schoolOptions = Array.from(new Set(filteredByLocation.map(s => s.schoolName))).sort();
-    } else if (!selectedDistrict && selectedSchool) {
-      // School only - filter by school
-      filteredByLocation = students.filter(s => s.schoolName === selectedSchool);
+    } else if (selectedDistrictId && !selectedLocationId) {
+      filteredByLocation = students.filter(s => s.districtId === selectedDistrictId);
+      // Show only schools from selected district
+      const schoolsInDistrict = new Map();
+      filteredByLocation.forEach(s => {
+        if (!schoolsInDistrict.has(s.locationId)) {
+          schoolsInDistrict.set(s.locationId, {
+            id: s.locationId,
+            name: s.schoolName
+          });
+        }
+      });
+      schoolOptions = Array.from(schoolsInDistrict.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } else if (!selectedDistrictId && selectedLocationId) {
+      filteredByLocation = students.filter(s => s.locationId === selectedLocationId);
     }
-    // If neither selected, show all students
 
     // Filter by grade
     const finalFilteredStudents = selectedGrade
@@ -2418,17 +2906,17 @@ export const StudentSelector: React.FC<Props> = ({
     let apiLevel = "None";
     if (selectedStudent) {
       apiLevel = "Student";
-    } else if (selectedGrade && (selectedDistrict || selectedSchool)) {
+    } else if (selectedGrade && (selectedDistrictId || selectedLocationId)) {
       apiLevel = "Grade";
-    } else if (selectedSchool && selectedDistrict) {
+    } else if (selectedLocationId && selectedDistrictId) {
       apiLevel = "School";
-    } else if (selectedDistrict) {
+    } else if (selectedDistrictId) {
       apiLevel = "District";
     }
 
     return {
-      districtNames: allDistricts,
-      schoolNames: schoolOptions,
+      districts: allDistricts,
+      schools: schoolOptions,
       availableGrades: grades,
       filteredStudents: finalFilteredStudents.sort((a, b) => {
         if (a.schoolName !== b.schoolName) return a.schoolName.localeCompare(b.schoolName);
@@ -2437,23 +2925,23 @@ export const StudentSelector: React.FC<Props> = ({
         if (gradeAIndex !== gradeBIndex) return gradeAIndex - gradeBIndex;
         return a.id.localeCompare(b.id);
       }),
-      activeFiltersCount: [selectedDistrict, selectedSchool, selectedGrade, selectedStudent]
+      activeFiltersCount: [selectedDistrictId, selectedLocationId, selectedGrade, selectedStudent]
         .filter(Boolean).length,
       currentApiLevel: apiLevel,
       selectionPath: path
     };
-  }, [students, selectedDistrict, selectedSchool, selectedGrade, selectedStudent]);
+  }, [students, selectedDistrictId, selectedLocationId, selectedGrade, selectedStudent]);
 
   // Simplified update function
   const updateFilters = (updates: Partial<{
-    district: string | null;
-    school: string | null;
+    districtId: number | null;
+    locationId: number | null;
     grade: string | null;
     student: Student | null;
   }>) => {
     const newFilters = {
-      district: updates.district !== undefined ? updates.district : selectedDistrict,
-      school: updates.school !== undefined ? updates.school : selectedSchool,
+      districtId: updates.districtId !== undefined ? updates.districtId : selectedDistrictId,
+      locationId: updates.locationId !== undefined ? updates.locationId : selectedLocationId,
       grade: updates.grade !== undefined ? updates.grade : selectedGrade,
       student: updates.student !== undefined ? updates.student : selectedStudent,
     };
@@ -2465,46 +2953,46 @@ export const StudentSelector: React.FC<Props> = ({
   };
 
   const clearAllFilters = () => updateFilters({
-    district: null,
-    school: null,
+    districtId: null,
+    locationId: null,
     grade: null,
     student: null,
   });
 
   // Handle district selection
-  const handleDistrictSelect = (district: string | null) => {
-    if (district) {
+  const handleDistrictSelect = (districtId: number | null) => {
+    if (districtId) {
       // If selecting a district, clear school, grade, and student
       updateFilters({ 
-        district, 
-        school: null, 
+        districtId, 
+        locationId: null, 
         grade: null, 
         student: null 
       });
     } else {
       // If clearing district, keep other selections if they're still valid
-      updateFilters({ district: null });
+      updateFilters({ districtId: null });
     }
   };
 
   // Handle school selection
-  const handleSchoolSelect = (school: string | null) => {
-    if (school) {
+  const handleSchoolSelect = (locationId: number | null) => {
+    if (locationId) {
       // If selecting a school, clear grade and student, but keep district if it matches
-      const schoolDistrict = students.find(s => s.schoolName === school)?.districtName;
+      const schoolDistrict = students.find(s => s.locationId === locationId)?.districtId;
       
-      if (selectedDistrict && schoolDistrict === selectedDistrict) {
+      if (selectedDistrictId && schoolDistrict === selectedDistrictId) {
         // Keep district if it matches the school's district
         updateFilters({ 
-          school, 
+          locationId, 
           grade: null, 
           student: null 
         });
       } else {
         // Clear district if it doesn't match or wasn't selected
         updateFilters({ 
-          district: null,
-          school, 
+          districtId: null,
+          locationId, 
           grade: null, 
           student: null 
         });
@@ -2512,17 +3000,17 @@ export const StudentSelector: React.FC<Props> = ({
     } else {
       // If clearing school, clear dependent selections
       updateFilters({ 
-        school: null, 
+        locationId: null, 
         grade: null, 
         student: null 
       });
     }
   };
 
-  // Reusable dropdown component
+  // Reusable dropdown component for ID/name pairs
   const FilterDropdown = ({ 
     label, 
-    value, 
+    selectedId,
     placeholder, 
     options, 
     onSelect, 
@@ -2530,69 +3018,73 @@ export const StudentSelector: React.FC<Props> = ({
     disabledReason
   }: {
     label: string;
-    value: string | null;
+    selectedId: number | null;
     placeholder: string;
-    options: string[];
-    onSelect: (value: string | null) => void;
+    options: Array<{id: number, name: string}>;
+    onSelect: (id: number | null) => void;
     disabled?: boolean;
     disabledReason?: string;
-  }) => (
-    <div className="space-y-2">
-      <label className={`block text-base font-semibold ${disabled ? 'text-gray-400' : 'text-gray-700'}`}>
-        {label}
-        {disabled && disabledReason && (
-          <span className="ml-2 text-xs text-gray-500">({disabledReason})</span>
-        )}
-      </label>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button 
-            variant="outline" 
-            disabled={disabled}
-            className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
-              value ? 'ring-2 ring-blue-200 border-blue-300' : ''
-            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            <span className="truncate">{value || placeholder}</span>
-            <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        {!disabled && (
-          <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
-            <DropdownMenuItem
-              onClick={() => onSelect(null)}
-              className="text-base py-2 cursor-pointer text-gray-500"
+  }) => {
+    const selectedOption = options.find(opt => opt.id === selectedId);
+    
+    return (
+      <div className="space-y-2">
+        <label className={`block text-base font-semibold ${disabled ? 'text-gray-400' : 'text-gray-700'}`}>
+          {label}
+          {disabled && disabledReason && (
+            <span className="ml-2 text-xs text-gray-500">({disabledReason})</span>
+          )}
+        </label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              disabled={disabled}
+              className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
+                selectedId ? 'ring-2 ring-blue-200 border-blue-300' : ''
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <div className="flex items-center w-full">
-                <span className="mr-2 w-4">{!value && <Check className="h-4 w-4" />}</span>
-                All {label}s
-              </div>
-            </DropdownMenuItem>
-            {options.length === 0 ? (
-              <DropdownMenuItem disabled className="text-base py-2">
-                No {label.toLowerCase()}s available
+              <span className="truncate">{selectedOption?.name || placeholder}</span>
+              <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          {!disabled && (
+            <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
+              <DropdownMenuItem
+                onClick={() => onSelect(null)}
+                className="text-base py-2 cursor-pointer text-gray-500"
+              >
+                <div className="flex items-center w-full">
+                  <span className="mr-2 w-4">{!selectedId && <Check className="h-4 w-4" />}</span>
+                  All {label}s
+                </div>
               </DropdownMenuItem>
-            ) : (
-              options.map((option) => (
-                <DropdownMenuItem
-                  key={option}
-                  onClick={() => onSelect(option)}
-                  className="text-base py-2 cursor-pointer"
-                >
-                  <div className="flex items-center w-full">
-                    <span className="mr-2 w-4">
-                      {value === option && <Check className="h-4 w-4" />}
-                    </span>
-                    {option}
-                  </div>
+              {options.length === 0 ? (
+                <DropdownMenuItem disabled className="text-base py-2">
+                  No {label.toLowerCase()}s available
                 </DropdownMenuItem>
-              ))
-            )}
-          </DropdownMenuContent>
-        )}
-      </DropdownMenu>
-    </div>
-  );
+              ) : (
+                options.map((option) => (
+                  <DropdownMenuItem
+                    key={option.id}
+                    onClick={() => onSelect(option.id)}
+                    className="text-base py-2 cursor-pointer"
+                  >
+                    <div className="flex items-center w-full">
+                      <span className="mr-2 w-4">
+                        {selectedId === option.id && <Check className="h-4 w-4" />}
+                      </span>
+                      {option.name}
+                    </div>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          )}
+        </DropdownMenu>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -2637,42 +3129,87 @@ export const StudentSelector: React.FC<Props> = ({
       {/* District Filter */}
       <FilterDropdown
         label="District"
-        value={selectedDistrict}
+        selectedId={selectedDistrictId}
         placeholder="Select district"
-        options={districtNames}
+        options={districts}
         onSelect={handleDistrictSelect}
       />
 
       {/* School Filter */}
       <FilterDropdown
         label="School"
-        value={selectedSchool}
+        selectedId={selectedLocationId}
         placeholder="Select school"
-        options={schoolNames}
+        options={schools}
         onSelect={handleSchoolSelect}
       />
 
       {/* Grade Filter */}
-      <FilterDropdown
-        label="Grade"
-        value={selectedGrade}
-        placeholder="Select grade"
-        options={availableGrades}
-        disabled={!selectedDistrict && !selectedSchool}
-        disabledReason={!selectedDistrict && !selectedSchool ? "Select district or school first" : ""}
-        onSelect={(grade) => updateFilters({ 
-          grade, 
-          student: null 
-        })}
-      />
+      <div className="space-y-2">
+        <label className={`block text-base font-semibold ${
+          (!selectedDistrictId && !selectedLocationId) ? 'text-gray-400' : 'text-gray-700'
+        }`}>
+          Grade
+          {(!selectedDistrictId && !selectedLocationId) && (
+            <span className="ml-2 text-xs text-gray-500">(Select district or school first)</span>
+          )}
+        </label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              disabled={!selectedDistrictId && !selectedLocationId}
+              className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
+                selectedGrade ? 'ring-2 ring-blue-200 border-blue-300' : ''
+              } ${(!selectedDistrictId && !selectedLocationId) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span className="truncate">{selectedGrade || "Select grade"}</span>
+              <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          {(selectedDistrictId || selectedLocationId) && (
+            <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
+              <DropdownMenuItem
+                onClick={() => updateFilters({ grade: null, student: null })}
+                className="text-base py-2 cursor-pointer text-gray-500"
+              >
+                <div className="flex items-center w-full">
+                  <span className="mr-2 w-4">{!selectedGrade && <Check className="h-4 w-4" />}</span>
+                  All Grades
+                </div>
+              </DropdownMenuItem>
+              {availableGrades.length === 0 ? (
+                <DropdownMenuItem disabled className="text-base py-2">
+                  No grades available
+                </DropdownMenuItem>
+              ) : (
+                availableGrades.map((grade) => (
+                  <DropdownMenuItem
+                    key={grade}
+                    onClick={() => updateFilters({ grade, student: null })}
+                    className="text-base py-2 cursor-pointer"
+                  >
+                    <div className="flex items-center w-full">
+                      <span className="mr-2 w-4">
+                        {selectedGrade === grade && <Check className="h-4 w-4" />}
+                      </span>
+                      {grade}
+                    </div>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          )}
+        </DropdownMenu>
+      </div>
 
       {/* Student Dropdown - Special case with additional info */}
       <div className="space-y-2">
         <label className={`block text-base font-semibold ${
-          (!selectedDistrict && !selectedSchool && !selectedGrade) ? 'text-gray-400' : 'text-gray-700'
+          (!selectedDistrictId && !selectedLocationId && !selectedGrade) ? 'text-gray-400' : 'text-gray-700'
         }`}>
           Student
-          {(!selectedDistrict && !selectedSchool && !selectedGrade) && (
+          {(!selectedDistrictId && !selectedLocationId && !selectedGrade) && (
             <span className="ml-2 text-xs text-gray-500">(Select filters first)</span>
           )}
         </label>
@@ -2680,10 +3217,10 @@ export const StudentSelector: React.FC<Props> = ({
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
-              disabled={!selectedDistrict && !selectedSchool && !selectedGrade}
+              disabled={!selectedDistrictId && !selectedLocationId && !selectedGrade}
               className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
                 selectedStudent ? 'ring-2 ring-blue-200 border-blue-300' : ''
-              } ${(!selectedDistrict && !selectedSchool && !selectedGrade) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${(!selectedDistrictId && !selectedLocationId && !selectedGrade) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className="truncate">
                 {selectedStudent?.id || "Select student"}
@@ -2691,7 +3228,7 @@ export const StudentSelector: React.FC<Props> = ({
               <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          {(selectedDistrict || selectedSchool || selectedGrade) && (
+          {(selectedDistrictId || selectedLocationId || selectedGrade) && (
             <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
               <DropdownMenuItem
                 onClick={() => updateFilters({ student: null })}
@@ -2739,11 +3276,19 @@ export const StudentSelector: React.FC<Props> = ({
         <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
           <h4 className="font-semibold text-sm text-green-800 mb-2">Current Selection:</h4>
           <div className="space-y-1 text-sm text-green-700">
-            {selectedDistrict && <div>District: <span className="font-medium">{selectedDistrict}</span></div>}
-            {selectedSchool && <div>School: <span className="font-medium">{selectedSchool}</span></div>}
+            {selectedDistrictId && (
+              <div>District: <span className="font-medium">
+                {districts.find(d => d.id === selectedDistrictId)?.name}
+              </span></div>
+            )}
+            {selectedLocationId && (
+              <div>School: <span className="font-medium">
+                {schools.find(s => s.id === selectedLocationId)?.name}
+              </span></div>
+            )}
             {selectedGrade && <div>Grade: <span className="font-medium">{selectedGrade}</span></div>}
             {selectedStudent && <div>Student: <span className="font-medium">{selectedStudent.id}</span></div>}
-            {!selectedStudent && (selectedDistrict || selectedSchool || selectedGrade) && (
+            {!selectedStudent && (selectedDistrictId || selectedLocationId || selectedGrade) && (
               <div className="text-green-600 font-medium">
                 API Endpoint: /{currentApiLevel}Data/ByFilters
               </div>
