@@ -13,6 +13,8 @@ export interface Student {
   grade: string;
   schoolName: string;
   districtName: string;
+  districtId: number;
+  locationId: number;
 }
 
 export interface RiskCategory {

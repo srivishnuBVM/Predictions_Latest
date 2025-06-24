@@ -2049,7 +2049,7 @@
 // export default Index;
 
 
-
+//final finale finale
 import React, { useEffect, useState, useCallback } from "react";
 import { Student, AttendanceData, RiskCategory } from "@/types";
 import { StudentSelector } from "@/components/StudentSelector";
@@ -2102,8 +2102,24 @@ const Index: React.FC = () => {
   
   const axiosInstance = axios.create({ baseURL: API });
 
-  useEffect(() => {
+  // useEffect(() => {
+  //   setAuthToken(token);
+  // }, [token]);
+
+    useEffect(() => {
+    console.log('Token from useAuth:', token);
+    console.log('Token type:', typeof token);
+    console.log('Token exists:', !!token);
+    
+    // Always call setAuthToken, even if token is null
     setAuthToken(token);
+    
+    // Additional debugging
+    if (token) {
+      console.log('Token successfully received from AuthContext');
+    } else {
+      console.log('No token received from AuthContext');
+    }
   }, [token]);
 
   // Fetch students on mount
@@ -2464,3 +2480,399 @@ const Index: React.FC = () => {
 };
 
 export default Index;
+
+
+
+// import React, { useEffect, useState, useCallback } from "react";
+// import { Student, AttendanceData, RiskCategory } from "@/types";
+// import { StudentSelector } from "@/components/StudentSelector";
+// import { AttendanceTrend } from "@/components/AttendanceTrend";
+// import { AttendanceHistory } from "@/components/AttendanceHistory";
+// import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+// import { CalendarCheck2, Filter } from "lucide-react";
+// import { useAuth } from "@/contexts/AuthContext";
+// import { setAuthToken } from "@/lib/axios";
+// import predictionService from "@/services/prediction.service";
+
+// interface Filters {
+//   districtId: number | null;
+//   locationId: number | null;
+//   grade: string | null;
+//   student: Student | null;
+// }
+
+// const Index: React.FC = () => {
+//   // State management
+//   const [students, setStudents] = useState<Student[]>([]);
+//   const [attendanceData, setAttendanceData] = useState<any>(null);
+//   const [loading, setLoading] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+//   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+//   // Combined filter state - ALL START AS NULL
+//   const [filters, setFilters] = useState<Filters>({
+//     districtId: null,
+//     locationId: null,
+//     grade: null,
+//     student: null,
+//   });
+  
+//   const { token } = useAuth();
+
+//   // Set auth token when it changes
+//   useEffect(() => {
+//     console.log('Token from useAuth:', token);
+//     console.log('Token type:', typeof token);
+//     console.log('Token exists:', !!token);
+    
+//     // Always call setAuthToken, even if token is null
+//     setAuthToken(token);
+    
+//     // Additional debugging
+//     if (token) {
+//       console.log('Token successfully received from AuthContext');
+//     } else {
+//       console.log('No token received from AuthContext');
+//     }
+//   }, [token]);
+
+//   // Fetch students on mount using predictionService
+//   useEffect(() => {
+//     const fetchStudents = async () => {
+//       try {
+//         setLoading(true);
+//         setError(null);
+        
+//         const studentsData = await predictionService.getStudents();
+//         setStudents(studentsData);
+//       } catch (error) {
+//         console.error("Failed to fetch students", error);
+//         setError("Failed to load students. Please try again.");
+//         setStudents([]);
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchStudents();
+//   }, []);
+
+//   // Fetch filtered data using predictionService
+//   const fetchFilteredData = useCallback(async () => {
+//     try {
+//       setLoading(true);
+//       setError(null);
+
+//       // Use predictionService instead of direct axios calls
+//       const data = await predictionService.getDataByFilters(filters, students);
+      
+//       if (!data) {
+//         setAttendanceData(null);
+//         return;
+//       }
+      
+//       setAttendanceData(data);
+
+//     } catch (error) {
+//       console.error("Failed to fetch filtered data", error);
+//       setError("Failed to load attendance data. Please try again.");
+//       setAttendanceData(null);
+//     } finally {
+//       setLoading(false);
+//     }
+//   }, [filters, students]);
+
+//   // Fetch data when filters change
+//   useEffect(() => {
+//     // Only fetch if we have students data loaded
+//     if (students.length > 0) {
+//       fetchFilteredData();
+//     }
+//   }, [fetchFilteredData, students.length]);
+
+//   // Helper functions for display
+//   const getDisplayInfo = () => {
+//     const { districtId, locationId, grade, student } = filters;
+    
+//     // Handle case when no filters are selected
+//     if (!districtId && !locationId && !grade && !student) {
+//       return {
+//         title: "All Districts Combined",
+//         subtitle: (
+//           <div className="flex gap-4 text-sm text-gray-500 mt-1">
+//             <span>Showing aggregated data across all districts</span>
+//             <span>Total Students: {students.length}</span>
+//           </div>
+//         )
+//       };
+//     }
+    
+//     if (student) {
+//       return {
+//         title: `Student: ${student.id}`,
+//         subtitle: (
+//           <div className="flex gap-4 text-sm text-gray-500 mt-1">
+//             <span>Grade: {student.grade}</span>
+//             <span>School: {student.schoolName}</span>
+//             <span>District: {student.districtName}</span>
+//           </div>
+//         )
+//       };
+//     }
+    
+//     const parts = [];
+//     if (grade) parts.push(`Grade: ${grade}`);
+//     if (locationId) {
+//       const schoolName = students.find(s => s.locationId === locationId)?.schoolName;
+//       if (schoolName) parts.push(`School: ${schoolName}`);
+//     }
+//     if (districtId) {
+//       const districtName = students.find(s => s.districtId === districtId)?.districtName;
+//       if (districtName) parts.push(`District: ${districtName}`);
+//     }
+    
+//     return {
+//       title: parts.length > 0 ? parts.join(" | ") : "No filters selected",
+//       subtitle: <div className="text-sm text-gray-500 mt-1">Showing aggregated data for selected filters</div>
+//     };
+//   };
+
+//   // Process attendance data for components
+//   const processedData = React.useMemo(() => {
+//     if (!attendanceData) {
+//       return {
+//         history: [],
+//         pred: null,
+//         trend: []
+//       };
+//     }
+
+//     // Convert metrics to history format
+//     const history = attendanceData.metrics ? attendanceData.metrics.map((metric: any) => ({
+//       year: parseInt(metric.year),
+//       attendanceRate: metric.attendanceRate,
+//       unexcused: metric.unexcused,
+//       present: metric.present,
+//       total: metric.total
+//     })) : [];
+
+//     // Get predicted attendance
+//     const pred = attendanceData.predictedAttendance ? {
+//       year: parseInt(attendanceData.predictedAttendance.year),
+//       attendanceRate: attendanceData.predictedAttendance.attendanceRate,
+//       total: attendanceData.predictedAttendance.total
+//     } : null;
+
+//     // Get trend data
+//     const trend = attendanceData.trend ? attendanceData.trend.map((item: any) => ({
+//       year: parseInt(item.year),
+//       value: item.value,
+//       isPredicted: item.isPredicted
+//     })) : [];
+
+//     return { history, pred, trend };
+//   }, [attendanceData]);
+
+//   const { history, pred, trend } = processedData;
+
+//   // Calculate metrics
+//   const curr = history[history.length - 1] ?? null;
+//   const prev = history[history.length - 2] ?? null;
+//   const { title, subtitle } = getDisplayInfo();
+
+//   // Metric card component
+//   const MetricCard = ({ 
+//     title, 
+//     value, 
+//     comparison, 
+//     comparisonYear 
+//   }: { 
+//     title: string; 
+//     value: string; 
+//     comparison?: number; 
+//     comparisonYear?: number; 
+//   }) => (
+//     <Card className="bg-white border border-[#C0D5DE] shadow-sm hover:shadow-md transition-shadow">
+//       <CardHeader className="pb-2">
+//         <CardTitle className="text-base text-gray-600">{title}</CardTitle>
+//       </CardHeader>
+//       <CardContent>
+//         <div className="flex items-baseline justify-between">
+//           <div className="flex items-center">
+//             <CalendarCheck2 className="h-5 w-5 text-[#03787c] mr-2" />
+//             <div className="text-3xl font-bold">{value}</div>
+//           </div>
+//           <div className="text-right">
+//             {comparison !== undefined && comparisonYear ? (
+//               <>
+//                 <div className={`font-semibold ${comparison >= 0 ? "text-[#03787c]" : "text-red-600"}`}>
+//                   {comparison >= 0 ? "▲" : "▼"}{Math.abs(comparison)}%
+//                 </div>
+//                 <p className="text-xs text-gray-500">vs {comparisonYear}</p>
+//               </>
+//             ) : (
+//               <div className="text-sm">N/A</div>
+//             )}
+//           </div>
+//         </div>
+//       </CardContent>
+//     </Card>
+//   );
+
+//   // Loading and error states
+//   if (loading && students.length === 0) {
+//     return (
+//       <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
+//         <div className="text-center">
+//           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#03787c] mx-auto mb-4"></div>
+//           <p className="text-gray-600">Loading students data...</p>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="min-h-screen bg-gray-50/50">
+//       {/* Header */}
+//       <header className="w-full bg-white border-b border-gray-200 shadow-sm">
+//         <div className="px-6 py-4">
+//           <h1 className="text-2xl font-bold text-gray-800">AI-Driven Attendance Analytics</h1>
+//           <p className="text-gray-500 mt-1">Track and analyze student attendance patterns</p>
+//         </div>
+//       </header>
+
+//       <div className="w-full flex">
+//         {/* Sidebar */}
+//         <aside className={`bg-white border-r border-[#C0D5DE] shadow-sm transition-all duration-300 ${
+//           sidebarCollapsed ? "w-14" : "w-80"
+//         } h-[calc(100vh-73px)] sticky top-[73px]`}>
+//           {!sidebarCollapsed ? (
+//             <div className="p-5">
+//               <div className="flex justify-between items-center mb-6">
+//                 <h2 className="text-lg font-bold text-gray-700">Filters</h2>
+//                 <button 
+//                   onClick={() => setSidebarCollapsed(true)}
+//                   className="text-gray-500 hover:text-gray-700 focus:outline-none"
+//                 >
+//                   <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+//                     <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+//                   </svg>
+//                 </button>
+//               </div>
+//               <StudentSelector
+//                 students={students}
+//                 selectedStudent={filters.student}
+//                 onSelect={(student) => setFilters(prev => ({ ...prev, student }))}
+//                 onFiltersChange={setFilters}
+//                 selectedDistrictId={filters.districtId}
+//                 selectedLocationId={filters.locationId}
+//                 selectedGrade={filters.grade}
+//               />
+//             </div>
+//           ) : (
+//             <div className="flex flex-col items-center pt-5">
+//               <button 
+//                 onClick={() => setSidebarCollapsed(false)}
+//                 className="flex flex-col items-center justify-center p-2 text-[#03787c] hover:text-[#026266] focus:outline-none"
+//               >
+//                 <Filter className="h-6 w-6 mb-1" />
+//                 <span className="text-xs rotate-90 mt-2">Filters</span>
+//               </button>
+//             </div>
+//           )}
+//         </aside>
+        
+//         {/* Main Content */}
+//         <main className="flex-1 p-6 bg-gray-50">
+//           {/* Info Header */}
+//           <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+//             <h2 className="text-xl font-bold">{title}</h2>
+//             {subtitle}
+//           </div>
+
+//           {/* Error Display */}
+//           {error && (
+//             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+//               <div className="flex items-center">
+//                 <div className="text-red-600 mr-2">⚠️</div>
+//                 <div className="text-red-800 font-medium">Error</div>
+//               </div>
+//               <p className="text-red-700 mt-1">{error}</p>
+//               <button
+//                 onClick={() => {
+//                   setError(null);
+//                   fetchFilteredData();
+//                 }}
+//                 className="mt-2 px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm"
+//               >
+//                 Retry
+//               </button>
+//             </div>
+//           )}
+
+//           {/* Show current API endpoint being used (for debugging) */}
+//           <div className="bg-blue-50 rounded-lg p-3 mb-6 text-sm text-blue-700">
+//             <strong>Current API:</strong> {predictionService.getApiEndpoint(filters)}
+//             {loading && (
+//               <div className="mt-1 flex items-center">
+//                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
+//                 <span>Loading...</span>
+//               </div>
+//             )}
+//             {attendanceData && (
+//               <div className="mt-1">
+//                 <strong>Data available:</strong> 
+//                 Attendance 2024: {attendanceData.attendance2024}%, 
+//                 Predicted 2025: {attendanceData.predicted2025}%
+//               </div>
+//             )}
+//           </div>
+
+//           {/* Metrics Cards */}
+//           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+//             <MetricCard
+//               title="Attendance Rate (2024)"
+//               value={attendanceData?.attendance2024 ? `${attendanceData.attendance2024}%` : "--"}
+//               comparison={curr && prev ? curr.attendanceRate - prev.attendanceRate : undefined}
+//               comparisonYear={prev?.year}
+//             />
+            
+//             <MetricCard
+//               title="AI Predicted Attendance (2025)"
+//               value={attendanceData?.predicted2025 ? `${attendanceData.predicted2025}%` : "--"}
+//               comparison={attendanceData && curr ? attendanceData.predicted2025 - curr.attendanceRate : undefined}
+//               comparisonYear={curr?.year}
+//             />
+//           </div>
+
+//           {/* Charts */}
+//           {trend.length > 0 && (
+//             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+//               <h3 className="text-lg font-bold mb-4">Attendance Trend</h3>
+//               <AttendanceTrend data={trend} />
+//             </div>
+//           )}
+
+//           {history.length > 0 && pred && (
+//             <div className="bg-white rounded-lg shadow-sm p-6">
+//               <h3 className="text-lg font-bold mb-4">Attendance History</h3>
+//               <AttendanceHistory history={history} predicted={pred} />
+//             </div>
+//           )}
+
+//           {/* Show raw data for debugging */}
+//           {attendanceData && (
+//             <div className="bg-gray-100 rounded-lg p-4 mt-6">
+//               <h4 className="font-bold mb-2">Debug - Raw API Response:</h4>
+//               <pre className="text-xs overflow-auto max-h-64">
+//                 {JSON.stringify(attendanceData, null, 2)}
+//               </pre>
+//             </div>
+//           )}
+//         </main>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default Index;
