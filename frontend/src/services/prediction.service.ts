@@ -1,124 +1,71 @@
-// import axiosInstance from "@/lib/axios";
-// import { Student, AttendanceData, RiskCategory } from "@/types";
-
-// class PredictionService {
-//   async getStudents(): Promise<Student[]> {
-//     const res = await axiosInstance.get("/students");
-//     return res.data;
-//   }
-
-//   async getStudentDetails(studentId: string): Promise<{
-//     risk: RiskCategory;
-//     predictedAttendance: AttendanceData;
-//     probability2025: number;
-//   }> {
-//     const res = await axiosInstance.get(`/StudentDetails/StudentID/${studentId}`);
-//     return res.data;
-//   }
-
-//   async getStudentMetrics(studentId: string): Promise<AttendanceData[]> {
-//     const res = await axiosInstance.get(`/StudentMetrics/StudentID/${studentId}`);
-//     return res.data;
-//   }
-
-//   async getStudentTrend(studentId: string): Promise<any[]> {
-//     const res = await axiosInstance.get(`/StudentTrend/StudentID/${studentId}`);
-//     return res.data;
-//   }
-// }
-
-// // Export an instance of the service
-// const predictionService = new PredictionService();
-// export default predictionService;
-
-
 import axiosInstance from "@/lib/axios";
 import { Student } from "@/types";
 
-// Types for API requests and responses
-interface FilterRequest {
+/* ---------- request & response shapes ---------- */
+
+export interface FilterRequest {
   districtId?: number;
-  schoolId?: number;
+  locationID?: number; // <-- must match FastAPI’s field
   studentId?: number;
   grade?: number;
 }
 
-interface AttendanceResponse {
-  attendance2024?: number;
-  predicted2025?: number;
+export interface AttendanceResponse {
+  previousAttendance?: number;
+  predictedAttendance?: number;
+  predictedValues?: {
+    year: string;
+    predictedAttendance: number;
+    totalDays: number;
+  };
   metrics?: any[];
-  trend?: any[];
-  predictedAttendance?: any;
+  trends?: any[];
   message?: string;
 }
 
-interface InitialDataResponse {
+export interface InitialDataResponse {
   districts: { id: number; name: string }[];
   schools: { id: number; name: string; districtId: number }[];
   students: Student[];
 }
 
+/* ---------- service implementation ---------- */
+
 class AttendanceService {
-  /**
-   * Get initial data including districts, schools, and students
-   */
   async getInitialData(): Promise<InitialDataResponse> {
-    const response = await axiosInstance.get("/students");
+    const res = await axiosInstance.get("/students");
     return {
-      districts: response.data.districts ?? [],
-      schools: response.data.schools ?? [],
-      students: response.data.students ?? []
+      districts: res.data.districts ?? [],
+      schools: res.data.schools ?? [],
+      students: res.data.students ?? [],
     };
   }
 
-  /**
-   * Get attendance data for all districts combined
-   */
   async getAllDistrictsData(): Promise<AttendanceResponse> {
-    const response = await axiosInstance.get("/AllDistrictsData");
-    return response.data;
+    const res = await axiosInstance.get("/AllDistrictsData");
+    return res.data;
   }
 
-  /**
-   * Get attendance data filtered by district
-   */
-  async getDistrictData(filters: FilterRequest): Promise<AttendanceResponse> {
-    const response = await axiosInstance.post("/DistrictData/ByFilters", filters);
-    return response.data;
+  async getDistrictData(body: FilterRequest): Promise<AttendanceResponse> {
+    const res = await axiosInstance.post("/DistrictData", body);
+    return res.data;
   }
 
-  /**
-   * Get attendance data filtered by school
-   */
-  async getSchoolData(filters: FilterRequest): Promise<AttendanceResponse> {
-    const response = await axiosInstance.post("/SchoolData/ByFilters", filters);
-    return response.data;
+  async getSchoolData(body: FilterRequest): Promise<AttendanceResponse> {
+    const res = await axiosInstance.post("/SchoolData", body);
+    return res.data;
   }
 
-  /**
-   * Get attendance data filtered by grade
-   */
-  async getGradeData(filters: FilterRequest): Promise<AttendanceResponse> {
-    const response = await axiosInstance.post("/GradeDetails/ByFilters", filters);
-    return response.data;
+  async getGradeData(body: FilterRequest): Promise<AttendanceResponse> {
+    const res = await axiosInstance.post("/GradeDetails", body);
+    return res.data;
   }
 
-  /**
-   * Get attendance data for a specific student
-   */
-  async getStudentData(filters: FilterRequest): Promise<AttendanceResponse> {
-    const response = await axiosInstance.post("/StudentDetails/ByFilters", filters);
-    return response.data;
+  async getStudentData(body: FilterRequest): Promise<AttendanceResponse> {
+    const res = await axiosInstance.post("/StudentDetails", body);
+    return res.data;
   }
 }
 
-// Export an instance of the service
 const attendanceService = new AttendanceService();
 export default attendanceService;
-
-// Also export the types for use in other files
-export type {
-  FilterRequest,
-  AttendanceResponse,
-  InitialDataResponse
-};

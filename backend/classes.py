@@ -24,9 +24,7 @@ class StudentsResponse(BaseModel):
     schools: List[School]
     students: List[Student]
  
-class SchoolSummaryRequest(BaseModel):
-    districtName: Optional[str] = None
-    schoolName: Optional[str] = None
+class DataRequest(BaseModel):
     studentId: Optional[int] = None
     grade: Optional[int] = -3
     districtId: Optional[int] = None
@@ -34,19 +32,19 @@ class SchoolSummaryRequest(BaseModel):
  
 class StudentMetrics(BaseModel):
     year: str
-    attendanceRate: Optional[int]
+    attendanceRate: Optional[float]
     unexcused: Optional[float]
     present: Optional[float]
     total: Optional[int]
  
 class StudentTrend(BaseModel):
     year: str
-    value: int
+    value: float
     isPredicted: bool
 
 class AttendanceValues(BaseModel):
     year: str
-    preictedAttendance: float
+    predictedAttendance: float
     totalDays: float
 
 class DataResponse(BaseModel):
