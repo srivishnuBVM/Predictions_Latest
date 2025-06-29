@@ -1,9 +1,8 @@
 import pandas as pd
 
 # Path to your CSV file
-csv_file_path = r"C:\Users\BVM\Downloads\AIP_CAD_Alerts_Dashboards-main\backend\Data\Predictions_agg.csv"  # Change to your actual path
-parquet_file_path = r"C:\Users\BVM\Downloads\AIP_CAD_Alerts_Dashboards-main\backend\Data\students_agg.parquet"  # Output path
-
+csv_file_path = r"C:\Users\BVM\Downloads\AIP_CAD_Alerts_Dashboards-main\backend\Data\Predictions_final.csv"
+parquet_file_path = r"C:\Users\BVM\Downloads\AIP_CAD_Alerts_Dashboards-main\backend\Data\predictions_final.parquet"
 # Read CSV
 df = pd.read_csv(csv_file_path)
 
