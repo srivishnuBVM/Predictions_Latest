@@ -1,4 +1,3 @@
-# backend/backend.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
@@ -14,7 +13,6 @@ from backend.config import (
     get_historical_years,
 )
 
-# ── column aliases ──────────────────────────────────────────────
 PRESENT_COL   = "Total_Days_Present"
 ENROLLED_COL  = "Total_Days_Enrolled"
 UNEXCUSED_COL = "Total_Days_Unexcused_Absent"
@@ -23,16 +21,12 @@ PRED_DIST_COL = "Predictions_District"
 PRED_SCH_COL  = "Predictions_School"
 PRED_GRD_COL  = "Predictions_Grade"
 
-# ── globals populated at startup ────────────────────────────────
 df = pd.DataFrame()
 cached_students   : list[dict] = []
 cached_districts  : list[dict] = []
 cached_schools    : list[dict] = []
 
 
-# ────────────────────────────────────────────────────────────────
-# utility helpers
-# ────────────────────────────────────────────────────────────────
 def _grade_to_str(g) -> str:
     if pd.isna(g):
         return "Unknown Grade"
@@ -50,18 +44,12 @@ def _grade_to_str(g) -> str:
 
 
 def _safe_int(val) -> int | None:
-    """Round-and-cast only if val is finite."""
     if pd.isna(val):
         return None
     return int(round(val))
 
 
 def _subset_pairs(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Split *data* into:
-      • hist (≤ current_year)
-      • pred (= predicted_year)
-    """
     cur, pred = get_current_year(), get_predicted_year()
     hist = data[data["SCHOOL_YEAR"] <= cur]
     pr   = data[data["SCHOOL_YEAR"] == pred]
@@ -122,7 +110,6 @@ def _aggregate_trends(hist: pd.DataFrame, pred_value: float | None) -> list[clas
 
 
 def _zero_response() -> classes.DataResponse:
-    """Return an all-zeros object that still validates against DataResponse."""
     p = get_predicted_year()
     return classes.DataResponse(
         previousAttendance=0,
@@ -133,16 +120,12 @@ def _zero_response() -> classes.DataResponse:
     )
 
 
-# ────────────────────────────────────────────────────────────────
-# data-loading / caching
-# ────────────────────────────────────────────────────────────────
 def load_and_process_data() -> None:
     global df, cached_students, cached_districts, cached_schools
 
     df = pd.read_parquet("backend/data/students_agg.parquet")
     year_config.refresh_config()
 
-    # ── build student cache from latest *historical* row, not 2025 —— #
     hist, _ = _subset_pairs(df)
     latest_hist = (
         hist.sort_values(["STUDENT_ID", "SCHOOL_YEAR"])
@@ -190,9 +173,6 @@ def load_and_process_data() -> None:
     )
 
 
-# ────────────────────────────────────────────────────────────────
-# FastAPI scaffolding
-# ────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     threading.Thread(target=load_and_process_data, daemon=True).start()
@@ -210,9 +190,6 @@ app.add_middleware(
 )
 
 
-# ────────────────────────────────────────────────────────────────
-# routes
-# ────────────────────────────────────────────────────────────────
 @app.get("/Students", response_model=classes.StudentsResponse)
 def get_students():
     return {"districts": cached_districts, "schools": cached_schools, "students": cached_students}
@@ -225,7 +202,6 @@ def get_all_districts_summary():
 
     hist, pred = _subset_pairs(df)
 
-    # current attendance
     cur_year = get_current_year()
     cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
     if cur_rows.empty:
@@ -236,7 +212,6 @@ def get_all_districts_summary():
     prev_att = round((present_tot / enrolled_tot) * 100, 1) if enrolled_tot > 0 else 0
     total_days = round(enrolled_tot / len(cur_rows), 1)
 
-    # prediction (district-level)
     preds = pred[PRED_DIST_COL].dropna()
     pred_att = round(preds.mean() * 100, 1) if not preds.empty else 0
 
@@ -276,7 +251,6 @@ def get_district_summary(req: classes.DataRequest):
     )
     total_days = round(cur_rows[ENROLLED_COL].mean(), 1)
 
-    # predictions
     district_pred = pred[PRED_DIST_COL].dropna()
     pred_att = round(district_pred.iloc[0] * 100, 1) if not district_pred.empty else 0
 
@@ -399,7 +373,6 @@ def get_student_summary(req: classes.DataRequest):
     prev_att  = round((cur_row[PRESENT_COL] / cur_row[ENROLLED_COL]) * 100, 1)
     total_days = round(cur_row[ENROLLED_COL], 1)
 
-    # prediction: if student has row in pred subset, else fallback to overall Predictions
     stu_pred = pred[pred["STUDENT_ID"] == cur_row.STUDENT_ID][PRED_COL].dropna()
     pred_att = (
         round(float(stu_pred.iloc[0]) * 100, 1)
