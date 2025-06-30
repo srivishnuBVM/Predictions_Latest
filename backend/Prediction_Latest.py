@@ -5,66 +5,177 @@ from contextlib import asynccontextmanager
 import pandas as pd
 import numpy as np
 import threading
-import classes
+import backend.classes as classes
+from backend.config import (
+    year_config,
+    get_current_year,
+    get_predicted_year,
+    get_historical_years,
+)
+
+PRESENT_COL   = "Total_Days_Present"
+ENROLLED_COL  = "Total_Days_Enrolled"
+UNEXCUSED_COL = "Total_Days_Unexcused_Absent"
+PRED_COL      = "Predictions"
+PRED_DIST_COL = "Predictions_District"
+PRED_SCH_COL  = "Predictions_School"
+PRED_GRD_COL  = "Predictions_Grade"
 
 df = pd.DataFrame()
-cached_students = []
-cached_districts = []
-cached_schools = []
+cached_students   : list[dict] = []
+cached_districts  : list[dict] = []
+cached_schools    : list[dict] = []
 
 
-def load_and_process_data():
-    global df, cached_students, cached_districts, cached_schools
-    df = pd.read_parquet("Data/students_agg.parquet")
-    cached_students.clear()
-    for sid in df["STUDENT_ID"].unique():
-        row = df[df["STUDENT_ID"] == sid].iloc[-1]
-        sid_int = int(row["STUDENT_ID"])
-        location_id = int(row.get("LOCATION_ID", -1))
-        g = row.get("STUDENT_GRADE_LEVEL", np.nan)
-        district_id = int(row.get("DISTRICT_CODE", -1))
-        if pd.isna(g):
-            grade_str = "Unknown Grade"
-        else:
-            grade = int(g)
-            if grade == -1:
-                grade_str = "Pre-Kindergarten"
-            elif grade == 0:
-                grade_str = "Kindergarten"
-            elif grade == 1:
-                grade_str = "1st Grade"
-            elif grade == 2:
-                grade_str = "2nd Grade"
-            elif grade == 3:
-                grade_str = "3rd Grade"
-            elif grade >= 11:
-                grade_str = f"{grade}th Grade"
-            else:
-                suffix = {1: "st", 2: "nd", 3: "rd"}.get(grade % 10, "th")
-                grade_str = f"{grade}{suffix} Grade"
-        cached_students.append(
-            {
-                "id": str(sid_int),
-                "grade": grade_str,
-                "locationId": location_id,
-                "schoolName": row.get("SCHOOL_NAME", "Unknown School"),
-                "districtName": row.get("DISTRICT_NAME", "Unknown District"),
-                "districtId": district_id,
-            }
+def _grade_to_str(g) -> str:
+    if pd.isna(g):
+        return "Unknown Grade"
+    g = int(g)
+    if g == -1:
+        return "Pre-Kindergarten"
+    if g == 0:
+        return "Kindergarten"
+    if g in (1, 2, 3):
+        return f"{g}{ {1:'st', 2:'nd', 3:'rd'}[g] } Grade"
+    if g >= 11:
+        return f"{g}th Grade"
+    suf = {1:"st",2:"nd",3:"rd"}.get(g % 10, "th")
+    return f"{g}{suf} Grade"
+
+
+def _safe_int(val) -> int | None:
+    if pd.isna(val):
+        return None
+    return int(round(val))
+
+
+def _subset_pairs(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    cur, pred = get_current_year(), get_predicted_year()
+    hist = data[data["SCHOOL_YEAR"] <= cur]
+    pr   = data[data["SCHOOL_YEAR"] == pred]
+    return hist, pr
+
+
+def _aggregate_metrics(hist: pd.DataFrame) -> list[classes.StudentMetrics]:
+    out: list[classes.StudentMetrics] = []
+    for yr in get_historical_years():
+        yd = hist[hist["SCHOOL_YEAR"] == yr]
+        if yd.empty:
+            continue
+        pres_sum = yd[PRESENT_COL ].astype(float).sum()
+        enr_sum  = yd[ENROLLED_COL].astype(float).sum()
+
+        unx_mean  = yd[UNEXCUSED_COL].astype(float).mean()
+        pres_mean = yd[PRESENT_COL ].astype(float).mean()
+        enr_mean  = yd[ENROLLED_COL].astype(float).mean()
+
+        rate = round((pres_sum / enr_sum) * 100) if enr_sum > 0 else None
+        out.append(
+            classes.StudentMetrics(
+                year=str(yr),
+                attendanceRate=rate,
+                unexcused=_safe_int(unx_mean),
+                present=_safe_int(pres_mean),
+                total=_safe_int(enr_mean),
+            )
         )
-    cached_students.sort(key=lambda x: x["id"])
-    unique_districts = df[["DISTRICT_CODE", "DISTRICT_NAME"]].drop_duplicates()
-    cached_districts[:] = [{"id": int(r.DISTRICT_CODE), "name": r.DISTRICT_NAME.strip()} for _, r in unique_districts.iterrows()]
-    unique_schools = df[["LOCATION_ID", "SCHOOL_NAME", "DISTRICT_CODE"]].drop_duplicates()
-    cached_schools[:] = [{"id": int(r.LOCATION_ID), "name": r.SCHOOL_NAME.strip(), "districtId": int(r.DISTRICT_CODE)} for _, r in unique_schools.iterrows()]
-    cached_districts.sort(key=lambda x: x["id"])
-    cached_schools.sort(key=lambda x: x["id"])
+    return out
+
+
+def _aggregate_trends(hist: pd.DataFrame, pred_value: float | None) -> list[classes.StudentTrend]:
+    cur_trends: list[classes.StudentTrend] = []
+    for yr in get_historical_years():
+        yd = hist[hist["SCHOOL_YEAR"] == yr]
+        if yd.empty:
+            continue
+        pres_sum = yd[PRESENT_COL ].astype(float).sum()
+        enr_sum  = yd[ENROLLED_COL].astype(float).sum()
+        if enr_sum > 0:
+            cur_trends.append(
+                classes.StudentTrend(
+                    year=str(yr),
+                    value=int(round((pres_sum / enr_sum) * 100)),
+                    isPredicted=False,
+                )
+            )
+    if pred_value is not None:
+        cur_trends.append(
+            classes.StudentTrend(
+                year=str(get_predicted_year()),
+                value=int(round(pred_value * 100)),
+                isPredicted=True,
+            )
+        )
+    return cur_trends
+
+
+def _zero_response() -> classes.DataResponse:
+    p = get_predicted_year()
+    return classes.DataResponse(
+        previousAttendance=0,
+        predictedAttendance=0,
+        predictedValues=classes.AttendanceValues(year=str(p), predictedAttendance=0, totalDays=0),
+        metrics=[],
+        trends=[],
+    )
+
+
+def load_and_process_data() -> None:
+    global df, cached_students, cached_districts, cached_schools
+
+    df = pd.read_parquet("backend/data/students_agg.parquet")
+    year_config.refresh_config()
+
+    hist, _ = _subset_pairs(df)
+    latest_hist = (
+        hist.sort_values(["STUDENT_ID", "SCHOOL_YEAR"])
+        .groupby("STUDENT_ID")
+        .tail(1)
+        .reset_index(drop=True)
+    )
+
+    cached_students[:] = sorted(
+        [
+            {
+                "id": str(int(r.STUDENT_ID)),
+                "grade": _grade_to_str(r.STUDENT_GRADE_LEVEL),
+                "locationId": _safe_int(r.LOCATION_ID) or -1,
+                "schoolName": (r.SCHOOL_NAME or "Unknown School").strip(),
+                "districtName": (r.DISTRICT_NAME or "Unknown District").strip(),
+                "districtId": _safe_int(r.DISTRICT_CODE) or -1,
+            }
+            for _, r in latest_hist.iterrows()
+        ],
+        key=lambda x: x["id"],
+    )
+
+    cached_districts[:] = (
+        df[["DISTRICT_CODE", "DISTRICT_NAME"]]
+        .drop_duplicates()
+        .assign(
+            id=lambda x: x.DISTRICT_CODE.fillna(-1).astype(int),
+            name=lambda x: x.DISTRICT_NAME.fillna("Unknown District").str.strip(),
+        )
+        .sort_values("id")
+        .to_dict("records")
+    )
+
+    cached_schools[:] = (
+        df[["LOCATION_ID", "SCHOOL_NAME", "DISTRICT_CODE"]]
+        .drop_duplicates()
+        .assign(
+            id=lambda x: x.LOCATION_ID.fillna(-1).astype(int),
+            name=lambda x: x.SCHOOL_NAME.fillna("Unknown School").str.strip(),
+            districtId=lambda x: x.DISTRICT_CODE.fillna(-1).astype(int),
+        )
+        .sort_values("id")
+        .to_dict("records")
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    thread = threading.Thread(target=load_and_process_data, daemon=True)
-    thread.start()
+    threading.Thread(target=load_and_process_data, daemon=True).start()
     yield
 
 
@@ -79,234 +190,161 @@ app.add_middleware(
 )
 
 
-@app.get("/students", response_model=classes.StudentsResponse)
+@app.get("/Students", response_model=classes.StudentsResponse)
 def get_students():
     return {"districts": cached_districts, "schools": cached_schools, "students": cached_students}
 
 
-@app.get("/AllDistrictsData", response_model=classes.DataResponse)
+@app.get("/AllDistricts", response_model=classes.DataResponse)
 def get_all_districts_summary():
-    global df
     if df.empty:
-        return {"message": "No data available"}
-    subset = df.copy()
-    latest_per_student = subset.sort_values(["STUDENT_ID", "SCHOOL_YEAR"]).groupby("STUDENT_ID").tail(1)
-    year_2024_rows = subset[subset["SCHOOL_YEAR"] == 2024]
-    if year_2024_rows.empty:
-        return {"message": "No 2024 data found across all districts."}
-    present_total = year_2024_rows["Total_Days_Present"].astype(float).sum()
-    enrolled_total = year_2024_rows["Total_Days_Enrolled"].astype(float).sum()
-    attendance_2024 = round((present_total / enrolled_total) * 100, 1) if enrolled_total > 0 else 0
-    all_preds = latest_per_student["District_aggregate"].dropna()
-    predicted_2025 = round(all_preds.mean() * 100, 1) if not all_preds.empty else round(latest_per_student["Predictions"].astype(float).mean() * 100, 1)
-    total_days = round(enrolled_total / len(year_2024_rows), 1)
-    metrics = []
-    for y in range(2019, 2025):
-        yd = subset[subset["SCHOOL_YEAR"] == y]
-        if yd.empty:
-            continue
-        pres = yd["Total_Days_Present"].astype(float).sum()
-        enr = yd["Total_Days_Enrolled"].astype(float).sum()
-        unx = yd["Total_Days_Unexcused_Absent"].astype(float).mean()
-        prem = yd["Total_Days_Present"].astype(float).mean()
-        rate = round((pres / enr) * 100) if enr > 0 else None
-        metrics.append(classes.StudentMetrics(year=str(y), attendanceRate=rate, unexcused=int(round(unx)) if pd.notna(unx) else None, present=int(round(prem)) if pd.notna(prem) else None, total=int(round(yd["Total_Days_Enrolled"].astype(float).mean()))))
-    trends = []
-    for y in range(2019, 2025):
-        yd = subset[subset["SCHOOL_YEAR"] == y]
-        if yd.empty:
-            continue
-        pres = yd["Total_Days_Present"].astype(float).sum()
-        enr = yd["Total_Days_Enrolled"].astype(float).sum()
-        if enr > 0:
-            trends.append(classes.StudentTrend(year=str(y), value=int(round((pres / enr) * 100)), isPredicted=False))
-    if not all_preds.empty:
-        trends.append(classes.StudentTrend(year="2025", value=int(round(all_preds.mean() * 100)), isPredicted=True))
-    return classes.DataResponse(previousAttendance=attendance_2024, predictedAttendance=predicted_2025, predictedValues=classes.AttendanceValues(year="2025", predictedAttendance=predicted_2025, totalDays=total_days), metrics=sorted(metrics, key=lambda x: x.year), trends=sorted(trends, key=lambda x: x.year))
+        return _zero_response()
+
+    hist, pred = _subset_pairs(df)
+
+    cur_year = get_current_year()
+    cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
+    if cur_rows.empty:
+        return _zero_response()
+
+    present_tot  = cur_rows[PRESENT_COL ].astype(float).sum()
+    enrolled_tot = cur_rows[ENROLLED_COL].astype(float).sum()
+    prev_att = round((present_tot / enrolled_tot) * 100, 1) if enrolled_tot > 0 else 0
+    total_days = round(enrolled_tot / len(cur_rows), 1)
+
+    preds = pred[PRED_DIST_COL].dropna()
+    pred_att = round(preds.mean() * 100, 1) if not preds.empty else 0
+
+    metrics = _aggregate_metrics(hist)
+    trends  = _aggregate_trends(hist, preds.mean() if not preds.empty else None)
+
+    return classes.DataResponse(
+        previousAttendance=prev_att,
+        predictedAttendance=pred_att,
+        predictedValues=classes.AttendanceValues(
+            year=str(get_predicted_year()), predictedAttendance=pred_att, totalDays=total_days
+        ),
+        metrics=metrics,
+        trends=trends,
+    )
 
 
-@app.post("/DistrictData", response_model=classes.DataResponse)
+@app.post("/District", response_model=classes.DataResponse)
 def get_district_summary(req: classes.DataRequest):
     if req.districtId is None or req.locationID or req.studentId or req.grade != -3:
-        return {"message": "Please supply districtId only for DistrictData."}
+        return _zero_response()
+
     subset = df[df["DISTRICT_CODE"] == req.districtId]
     if subset.empty:
-        return {"message": "No matching data found"}
-    latest_per_student = subset.sort_values(["STUDENT_ID", "SCHOOL_YEAR"]).groupby("STUDENT_ID").tail(1)
-    year_2024_rows = subset[subset["SCHOOL_YEAR"] == 2024]
-    if year_2024_rows.empty:
-        return {"message": "No 2024 data found in this district."}
-    pres = year_2024_rows["Total_Days_Present"].astype(float)
-    enr = year_2024_rows["Total_Days_Enrolled"].astype(float)
-    attendance_2024 = round((pres.sum() / enr.sum()) * 100, 1)
-    district_agg = latest_per_student["District_aggregate"].iloc[0]
-    predicted_2025 = round(float(district_agg) * 100, 1) if pd.notna(district_agg) else round(latest_per_student["Predictions"].astype(float).mean() * 100, 1)
-    total_days = round(enr.mean(), 1)
-    metrics = []
-    for y in range(2019, 2025):
-        yd = subset[subset["SCHOOL_YEAR"] == y]
-        if yd.empty:
-            continue
-        pres_sum = yd["Total_Days_Present"].astype(float).sum()
-        enr_sum = yd["Total_Days_Enrolled"].astype(float).sum()
-        unx = yd["Total_Days_Unexcused_Absent"].astype(float).mean()
-        prem = yd["Total_Days_Present"].astype(float).mean()
-        rate = round((pres_sum / enr_sum) * 100) if enr_sum > 0 else None
-        metrics.append(classes.StudentMetrics(year=str(y), attendanceRate=rate, unexcused=int(round(unx)) if pd.notna(unx) else None, present=int(round(prem)) if pd.notna(prem) else None, total=int(round(yd["Total_Days_Enrolled"].astype(float).mean()))))
-    trends = []
-    for y in range(2019, 2025):
-        yd = subset[subset["SCHOOL_YEAR"] == y]
-        if yd.empty:
-            continue
-        pres_sum = yd["Total_Days_Present"].astype(float).sum()
-        enr_sum = yd["Total_Days_Enrolled"].astype(float).sum()
-        if enr_sum > 0:
-            trends.append(classes.StudentTrend(year=str(y), value=int(round((pres_sum / enr_sum) * 100)), isPredicted=False))
-    if pd.notna(district_agg):
-        trends.append(classes.StudentTrend(year="2025", value=int(round(float(district_agg) * 100)), isPredicted=True))
-    return classes.DataResponse(previousAttendance=attendance_2024, predictedAttendance=predicted_2025, predictedValues=classes.AttendanceValues(year="2025", predictedAttendance=predicted_2025, totalDays=total_days), metrics=sorted(metrics, key=lambda x: x.year), trends=sorted(trends, key=lambda x: x.year))
+        return _zero_response()
+
+    hist, pred = _subset_pairs(subset)
+
+    # current attendance
+    cur_year = get_current_year()
+    cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
+    if cur_rows.empty:
+        return _zero_response()
+
+    prev_att = round(
+        (cur_rows[PRESENT_COL].sum() / cur_rows[ENROLLED_COL].sum()) * 100, 1
+    )
+    total_days = round(cur_rows[ENROLLED_COL].mean(), 1)
+
+    district_pred = pred[PRED_DIST_COL].dropna()
+    pred_att = round(district_pred.iloc[0] * 100, 1) if not district_pred.empty else 0
+
+    metrics = _aggregate_metrics(hist)
+    trends  = _aggregate_trends(hist, district_pred.iloc[0] if not district_pred.empty else None)
+
+    return classes.DataResponse(
+        previousAttendance=prev_att,
+        predictedAttendance=pred_att,
+        predictedValues=classes.AttendanceValues(
+            year=str(get_predicted_year()), predictedAttendance=pred_att, totalDays=total_days
+        ),
+        metrics=metrics,
+        trends=trends,
+    )
 
 
-@app.post("/SchoolData", response_model=classes.DataResponse)
+@app.post("/School", response_model=classes.DataResponse)
 def get_school_summary(req: classes.DataRequest):
     subset = df.copy()
-
     if req.districtId is not None:
         subset = subset[subset["DISTRICT_CODE"] == req.districtId]
     if req.locationID is not None:
         subset = subset[subset["LOCATION_ID"] == req.locationID]
     if subset.empty:
-        return {"message": "No matching data found"}
-    
-    latest_per_student = subset.sort_values(["STUDENT_ID", "SCHOOL_YEAR"]).groupby("STUDENT_ID").tail(1)
-    year_2024_rows = latest_per_student[latest_per_student["SCHOOL_YEAR"] == 2024]
+        return _zero_response()
 
-    if year_2024_rows.empty:
-        return {"message": "No 2024 data found in this school."}
-    
-    pres = year_2024_rows["Total_Days_Present"].astype(float)
-    enr = year_2024_rows["Total_Days_Enrolled"].astype(float)
-    attendance_2024 = round((pres.sum() / enr.sum()) * 100, 1)
-    school_agg = latest_per_student["School_aggregate"].iloc[0]
-    predicted_2025 = round(float(school_agg) * 100, 1) if pd.notna(school_agg) else round(latest_per_student["Predictions"].astype(float).mean() * 100, 1)
-    total_days = round(enr.mean(), 1)
+    hist, pred = _subset_pairs(subset)
 
-    metrics = []
-    for y in range(2019, 2025):
-        ys = subset[subset["SCHOOL_YEAR"] == y]
-        if ys.empty:
-            continue
-        pres_sum = ys["Total_Days_Present"].astype(float).sum()
-        enr_sum = ys["Total_Days_Enrolled"].astype(float).sum()
-        unx = ys["Total_Days_Unexcused_Absent"].astype(float).mean()
-        prem = ys["Total_Days_Present"].astype(float).mean()
-        rate = round((pres_sum / enr_sum) * 100) if enr_sum > 0 else None
-        metrics.append(classes.StudentMetrics(year=str(y), attendanceRate=rate, unexcused=int(round(unx)) if pd.notna(unx) else None, present=int(round(prem)) if pd.notna(prem) else None, total=int(round(ys["Total_Days_Enrolled"].astype(float).mean()))))
-    trends = []
-    for y in range(2019, 2025):
-        ys = subset[subset["SCHOOL_YEAR"] == y]
-        if ys.empty:
-            continue
-        pres_sum = ys["Total_Days_Present"].astype(float).sum()
-        enr_sum = ys["Total_Days_Enrolled"].astype(float).sum()
-        if enr_sum > 0:
-            trends.append(classes.StudentTrend(year=str(y), value=int(round((pres_sum / enr_sum) * 100)), isPredicted=False))
-    if pd.notna(school_agg):
-        trends.append(classes.StudentTrend(year="2025", value=int(round(float(school_agg) * 100)), isPredicted=True))
-    return classes.DataResponse(previousAttendance=attendance_2024, predictedAttendance=predicted_2025, predictedValues=classes.AttendanceValues(year="2025", predictedAttendance=predicted_2025, totalDays=total_days), metrics=sorted(metrics, key=lambda x: x.year), trends=sorted(trends, key=lambda x: x.year))
+    cur_year = get_current_year()
+    cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
+    if cur_rows.empty:
+        return _zero_response()
+
+    prev_att = round(
+        (cur_rows[PRESENT_COL].sum() / cur_rows[ENROLLED_COL].sum()) * 100, 1
+    )
+    total_days = round(cur_rows[ENROLLED_COL].mean(), 1)
+
+    school_pred = pred[PRED_SCH_COL].dropna()
+    pred_att = round(school_pred.iloc[0] * 100, 1) if not school_pred.empty else 0
+
+    metrics = _aggregate_metrics(hist)
+    trends  = _aggregate_trends(hist, school_pred.iloc[0] if not school_pred.empty else None)
+
+    return classes.DataResponse(
+        previousAttendance=prev_att,
+        predictedAttendance=pred_att,
+        predictedValues=classes.AttendanceValues(
+            year=str(get_predicted_year()), predictedAttendance=pred_att, totalDays=total_days
+        ),
+        metrics=metrics,
+        trends=trends,
+    )
 
 
 @app.post("/GradeDetails", response_model=classes.DataResponse)
 def get_grade_summary(req: classes.DataRequest):
     subset = df.copy()
-
     if req.districtId is not None:
         subset = subset[subset["DISTRICT_CODE"] == req.districtId]
-      
     if req.locationID is not None:
         subset = subset[subset["LOCATION_ID"] == req.locationID]
-        
     if req.grade != -3:
         subset = subset[subset["STUDENT_GRADE_LEVEL"] == req.grade]
-       
     if subset.empty:
-        return classes.DataResponse(
-        previousAttendance=0, 
-        predictedAttendance=0, 
-        predictedValues=classes.AttendanceValues(
-            year="2025", 
-            predictedAttendance=0, 
-            totalDays=0
-        ), 
-        metrics=[classes.StudentMetrics(year='0',
-            attendanceRate=0,
-            unexcused=0,
-            present=0,
-            total=0)], 
-        trends=sorted([classes.StudentTrend(year='0', value=0, isPredicted=False)])
+        return _zero_response()
+
+    hist, pred = _subset_pairs(subset)
+
+    cur_year = get_current_year()
+    cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
+    if cur_rows.empty:
+        return _zero_response()
+
+    prev_att = round(
+        (cur_rows[PRESENT_COL].sum() / cur_rows[ENROLLED_COL].sum()) * 100, 1
     )
-    
-    latest_per_student = subset.sort_values(["STUDENT_ID", "SCHOOL_YEAR"]).groupby("STUDENT_ID").tail(1)
-    year_2024_rows = latest_per_student[latest_per_student["SCHOOL_YEAR"] == 2024]
+    total_days = round(cur_rows[ENROLLED_COL].mean(), 1)
 
-    if year_2024_rows.empty:
-        return classes.DataResponse(
-        previousAttendance=0, 
-        predictedAttendance=0, 
-        predictedValues=classes.AttendanceValues(
-            year="2025", 
-            predictedAttendance=0, 
-            totalDays=0
-        ), 
-        metrics=[classes.StudentMetrics(year='0',
-            attendanceRate=0,
-            unexcused=0,
-            present=0,
-            total=0)], 
-        trends=sorted([classes.StudentTrend(year='0', value=0, isPredicted=False)])
-    )
-    
-    pres = year_2024_rows["Total_Days_Present"].astype(float)
-    enr = year_2024_rows["Total_Days_Enrolled"].astype(float)
-    attendance_2024 = round((pres.sum() / enr.sum()) * 100, 1)
-    grade_agg = latest_per_student["Grade_aggregate"].iloc[0]
-    predicted_2025 = round(float(grade_agg) * 100, 1) if pd.notna(grade_agg) else round(latest_per_student["Predictions"].astype(float).mean() * 100, 1)
-    total_days = round(enr.mean(), 1)
+    grade_pred = pred[PRED_GRD_COL].dropna()
+    pred_att = round(grade_pred.iloc[0] * 100, 1) if not grade_pred.empty else 0
 
-    metrics = []
-    for y in range(2019, 2025):
-        ys = subset[subset["SCHOOL_YEAR"] == y]
-        if ys.empty:
-            continue
-        pres_sum = ys["Total_Days_Present"].astype(float).sum()
-        enr_sum = ys["Total_Days_Enrolled"].astype(float).sum()
-        unx = ys["Total_Days_Unexcused_Absent"].astype(float).mean()
-        prem = ys["Total_Days_Present"].astype(float).mean()
-        rate = round((pres_sum / enr_sum) * 100) if enr_sum > 0 else None
-        metrics.append(classes.StudentMetrics(year=str(y), attendanceRate=rate, unexcused=int(round(unx)) if pd.notna(unx) else None, present=int(round(prem)) if pd.notna(prem) else None, total=int(round(ys["Total_Days_Enrolled"].astype(float).mean()))))
-
-    trends = []
-    for y in range(2019, 2025):
-        ys = subset[subset["SCHOOL_YEAR"] == y]
-        if ys.empty:
-            continue
-        pres_sum = ys["Total_Days_Present"].astype(float).sum()
-        enr_sum = ys["Total_Days_Enrolled"].astype(float).sum()
-        if enr_sum > 0:
-            trends.append(classes.StudentTrend(year=str(y), value=int(round((pres_sum / enr_sum) * 100)), isPredicted=False))
-    if pd.notna(grade_agg):
-        trends.append(classes.StudentTrend(year="2025", value=int(round(float(grade_agg) * 100)), isPredicted=True))
+    metrics = _aggregate_metrics(hist)
+    trends  = _aggregate_trends(hist, grade_pred.iloc[0] if not grade_pred.empty else None)
 
     return classes.DataResponse(
-        previousAttendance=attendance_2024, 
-        predictedAttendance=predicted_2025, 
+        previousAttendance=prev_att,
+        predictedAttendance=pred_att,
         predictedValues=classes.AttendanceValues(
-            year="2025", 
-            predictedAttendance=predicted_2025, 
-            totalDays=total_days
-        ), 
-        metrics=sorted(metrics, key=lambda x: x.year), 
-        trends=sorted(trends, key=lambda x: x.year)
+            year=str(get_predicted_year()), predictedAttendance=pred_att, totalDays=total_days
+        ),
+        metrics=metrics,
+        trends=trends,
     )
 
 
@@ -322,44 +360,52 @@ def get_student_summary(req: classes.DataRequest):
     elif req.grade != -3:
         subset = subset[subset["STUDENT_GRADE_LEVEL"] == req.grade]
     if subset.empty:
-        return {"message": "No matching data found"}
-    latest_row = subset.sort_values("SCHOOL_YEAR").iloc[-1]
-    year_2024_row = subset[subset["SCHOOL_YEAR"] == 2024].iloc[-1] if not subset[subset["SCHOOL_YEAR"] == 2024].empty else None
-    if year_2024_row is not None:
-        pres_d = float(year_2024_row["Total_Days_Present"])
-        enr_d = float(year_2024_row["Total_Days_Enrolled"])
-        attendance_2024 = round((pres_d / enr_d) * 100, 1)
-        total_days = round(enr_d, 1)
-    else:
-        attendance_2024 = None
-        total_days = None
-    dist_agg = latest_row["District_aggregate"] if "District_aggregate" in latest_row and pd.notna(latest_row["District_aggregate"]) else None
-    predicted_2025 = round(float(dist_agg) * 100, 1) if dist_agg is not None else (round(float(latest_row["Predictions"]) * 100, 1) if "Predictions" in latest_row else None)
+        return _zero_response()
+
+    hist, pred = _subset_pairs(subset)
+
+    cur_year = get_current_year()
+    cur_row = hist[hist["SCHOOL_YEAR"] == cur_year]
+    if cur_row.empty:
+        return _zero_response()
+    cur_row = cur_row.iloc[-1]
+
+    prev_att  = round((cur_row[PRESENT_COL] / cur_row[ENROLLED_COL]) * 100, 1)
+    total_days = round(cur_row[ENROLLED_COL], 1)
+
+    stu_pred = pred[pred["STUDENT_ID"] == cur_row.STUDENT_ID][PRED_COL].dropna()
+    pred_att = (
+        round(float(stu_pred.iloc[0]) * 100, 1)
+        if not stu_pred.empty
+        else round(float(cur_row[PRED_COL]) * 100, 1)
+    )
+
     metrics = []
-    for y in range(2019, 2025):
-        rw = subset[subset["SCHOOL_YEAR"] == y]
+    for yr in get_historical_years():
+        rw = hist[hist["SCHOOL_YEAR"] == yr]
         if rw.empty:
             continue
-        pres = rw["Total_Days_Present"].values[0]
-        enr = rw["Total_Days_Enrolled"].values[0]
-        if pd.notna(pres) and pd.notna(enr) and enr > 0:
-            rate = int(round((pres / enr) * 100))
-        else:
-            rate = None
-        total = int(round(rw["Total_Days_Enrolled"].values[0]))
-        unx = int(round(rw["Total_Days_Unexcused_Absent"].values[0])) if rw["Total_Days_Unexcused_Absent"].notna().any() else None
-        metrics.append(classes.StudentMetrics(year=str(y), attendanceRate=rate, unexcused=unx, present=int(round(pres)) if pd.notna(pres) else None, total=total))
-    trends = []
-    for y in range(2019, 2025):
-        rw = subset[subset["SCHOOL_YEAR"] == y]
-        if rw.empty:
-            continue
-        pres = rw["Total_Days_Present"].values[0]
-        enr = rw["Total_Days_Enrolled"].values[0]
-        if pd.notna(pres) and pd.notna(enr) and enr > 0:
-            trends.append(classes.StudentTrend(year=str(y), value=int(round((pres / enr) * 100)), isPredicted=False))
-    if dist_agg is not None:
-        trends.append(classes.StudentTrend(year="2025", value=int(round(float(dist_agg) * 100)), isPredicted=True))
-    elif "Predictions" in latest_row and not np.isnan(latest_row["Predictions"]):
-        trends.append(classes.StudentTrend(year="2025", value=int(round(latest_row["Predictions"] * 100)), isPredicted=True))
-    return classes.DataResponse(previousAttendance=attendance_2024, predictedAttendance=predicted_2025, predictedValues=classes.AttendanceValues(year="2025", predictedAttendance=predicted_2025, totalDays=total_days), metrics=sorted(metrics, key=lambda x: x.year), trends=sorted(trends, key=lambda x: x.year))
+        rw = rw.iloc[-1]
+        pres, enr = rw[PRESENT_COL], rw[ENROLLED_COL]
+        rate = int(round((pres / enr) * 100)) if enr > 0 else None
+        metrics.append(
+            classes.StudentMetrics(
+                year=str(yr),
+                attendanceRate=rate,
+                unexcused=_safe_int(rw[UNEXCUSED_COL]),
+                present=_safe_int(pres),
+                total=_safe_int(enr),
+            )
+        )
+
+    trends = _aggregate_trends(hist, float(stu_pred.iloc[0]) if not stu_pred.empty else None)
+
+    return classes.DataResponse(
+        previousAttendance=prev_att,
+        predictedAttendance=pred_att,
+        predictedValues=classes.AttendanceValues(
+            year=str(get_predicted_year()), predictedAttendance=pred_att, totalDays=total_days
+        ),
+        metrics=metrics,
+        trends=trends,
+    )

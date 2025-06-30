@@ -13,3 +13,4 @@ joblib
 typing
 python-dateutil
 xgboost
+orjson

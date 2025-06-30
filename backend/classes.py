@@ -45,10 +45,10 @@ class StudentTrend(BaseModel):
 class AttendanceValues(BaseModel):
     year: str
     predictedAttendance: float
-    totalDays: float
+    totalDays: float | None
 
 class DataResponse(BaseModel):
-    previousAttendance: float
+    previousAttendance: float | None
     predictedAttendance: float
     predictedValues: AttendanceValues
     metrics: List[StudentMetrics]

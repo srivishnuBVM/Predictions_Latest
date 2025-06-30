@@ -73,7 +73,6 @@ const Index: React.FC = () => {
     try {
       const { district, school, grade, student } = filters;
 
-      // no filters → all-district aggregate
       if (!district && !school && !grade && !student) {
         const data = await attendanceService.getAllDistrictsData();
         setAttendanceData(data.message ? null : data);
@@ -82,7 +81,7 @@ const Index: React.FC = () => {
 
       const body: FilterRequest = {};
       if (district) body.districtId = district;
-      if (school) body.locationID = school; // correct key
+      if (school) body.locationID = school;
       if (grade) {
         const g = gradeStringToNumber(grade);
         if (g !== -3) body.grade = g;
@@ -107,7 +106,6 @@ const Index: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  /* ---------- massaging API data for charts ---------- */
   const processed = useMemo(() => {
     if (!attendanceData) return { history: [], trend: [], pred: null };
 
@@ -125,7 +123,7 @@ const Index: React.FC = () => {
       ? {
           year: parseInt(pv.year),
           attendanceRate: pv.predictedAttendance,
-          total: pv.totalDays,
+          total: pv.totalDays ? Math.floor(pv.totalDays) : pv.totalDays,
         }
       : null;
 
@@ -142,7 +140,6 @@ const Index: React.FC = () => {
   const curr = processed.history.at(-1) ?? null;
   const prev = processed.history.at(-2) ?? null;
 
-  /* ---------- small UI helper ---------- */
   const MetricCard = ({
     title,
     value,
@@ -172,7 +169,9 @@ const Index: React.FC = () => {
                     comparison >= 0 ? "text-[#03787c]" : "text-red-600"
                   }`}
                 >
-                  {`${comparison >= 0 ? "▲" : "▼"}${Math.abs(comparison)}%`}
+                  {`${comparison >= 0 ? "▲" : "▼"}${Math.abs(
+                    comparison
+                  ).toFixed(1)}%`}
                 </div>
                 <p className="text-xs text-gray-500">{`vs ${comparisonYear}`}</p>
               </>
@@ -185,7 +184,6 @@ const Index: React.FC = () => {
     </Card>
   );
 
-  /* ---------- loading splash ---------- */
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gray-50/50">
@@ -214,7 +212,6 @@ const Index: React.FC = () => {
     );
   }
 
-  /* ---------- main page ---------- */
   return (
     <div className="min-h-screen bg-gray-50/50">
       <header className="w-full bg-white border-b border-gray-200 shadow-sm">

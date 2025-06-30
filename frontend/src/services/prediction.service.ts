@@ -1,11 +1,9 @@
 import axiosInstance from "@/lib/axios";
 import { Student } from "@/types";
 
-/* ---------- request & response shapes ---------- */
-
 export interface FilterRequest {
   districtId?: number;
-  locationID?: number; // <-- must match FastAPI’s field
+  locationID?: number;
   studentId?: number;
   grade?: number;
 }
@@ -29,11 +27,9 @@ export interface InitialDataResponse {
   students: Student[];
 }
 
-/* ---------- service implementation ---------- */
-
 class AttendanceService {
   async getInitialData(): Promise<InitialDataResponse> {
-    const res = await axiosInstance.get("/students");
+    const res = await axiosInstance.get("/Students");
     return {
       districts: res.data.districts ?? [],
       schools: res.data.schools ?? [],
@@ -42,17 +38,17 @@ class AttendanceService {
   }
 
   async getAllDistrictsData(): Promise<AttendanceResponse> {
-    const res = await axiosInstance.get("/AllDistrictsData");
+    const res = await axiosInstance.get("/AllDistricts");
     return res.data;
   }
 
   async getDistrictData(body: FilterRequest): Promise<AttendanceResponse> {
-    const res = await axiosInstance.post("/DistrictData", body);
+    const res = await axiosInstance.post("/District", body);
     return res.data;
   }
 
   async getSchoolData(body: FilterRequest): Promise<AttendanceResponse> {
-    const res = await axiosInstance.post("/SchoolData", body);
+    const res = await axiosInstance.post("/School", body);
     return res.data;
   }
 
