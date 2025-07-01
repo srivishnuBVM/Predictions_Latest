@@ -5,17 +5,14 @@ from contextlib import asynccontextmanager
 import pandas as pd
 import numpy as np
 import threading
-import backend.classes as classes
-from backend.config import (
+import classes
+from config import (
     year_config,
     get_current_year,
     get_predicted_year,
     get_historical_years,
 )
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import uvicorn
 
 
 PRESENT_COL   = "Total_Days_Present"
@@ -246,7 +243,6 @@ def get_district_summary(req: classes.DataRequest):
     hist, pred = _subset_pairs(subset)
 
     cur_year = get_current_year()
-    logger.info(f'Current Year is {cur_year}')
     cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
     if cur_rows.empty:
         return _zero_response()
@@ -414,3 +410,7 @@ def get_student_summary(req: classes.DataRequest):
         metrics=metrics,
         trends=trends,
     )
+
+
+if __name__ == '__main__':
+    uvicorn.run(app=app, host='0.0.0.0', port=8000)
