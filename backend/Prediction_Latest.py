@@ -12,6 +12,11 @@ from backend.config import (
     get_predicted_year,
     get_historical_years,
 )
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 PRESENT_COL   = "Total_Days_Present"
 ENROLLED_COL  = "Total_Days_Enrolled"
@@ -123,7 +128,7 @@ def _zero_response() -> classes.DataResponse:
 def load_and_process_data() -> None:
     global df, cached_students, cached_districts, cached_schools
 
-    df = pd.read_parquet("backend/data/students_agg.parquet")
+    df = pd.read_parquet("backend/data/Predictions.parquet")
     year_config.refresh_config()
 
     hist, _ = _subset_pairs(df)
@@ -183,19 +188,19 @@ app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-@app.get("/Students", response_model=classes.StudentsResponse)
+@app.get("/api/predictions/students", response_model=classes.StudentsResponse)
 def get_students():
     return {"districts": cached_districts, "schools": cached_schools, "students": cached_students}
 
 
-@app.get("/AllDistricts", response_model=classes.DataResponse)
+@app.get("/api/predictions/all-districts", response_model=classes.DataResponse)
 def get_all_districts_summary():
     if df.empty:
         return _zero_response()
@@ -229,7 +234,7 @@ def get_all_districts_summary():
     )
 
 
-@app.post("/District", response_model=classes.DataResponse)
+@app.post("/api/predictions/district", response_model=classes.DataResponse)
 def get_district_summary(req: classes.DataRequest):
     if req.districtId is None or req.locationID or req.studentId or req.grade != -3:
         return _zero_response()
@@ -240,8 +245,8 @@ def get_district_summary(req: classes.DataRequest):
 
     hist, pred = _subset_pairs(subset)
 
-    # current attendance
     cur_year = get_current_year()
+    logger.info(f'Current Year is {cur_year}')
     cur_rows = hist[hist["SCHOOL_YEAR"] == cur_year]
     if cur_rows.empty:
         return _zero_response()
@@ -268,7 +273,7 @@ def get_district_summary(req: classes.DataRequest):
     )
 
 
-@app.post("/School", response_model=classes.DataResponse)
+@app.post("/api/predictions/school", response_model=classes.DataResponse)
 def get_school_summary(req: classes.DataRequest):
     subset = df.copy()
     if req.districtId is not None:
@@ -307,7 +312,7 @@ def get_school_summary(req: classes.DataRequest):
     )
 
 
-@app.post("/GradeDetails", response_model=classes.DataResponse)
+@app.post("/api/predictions/grade-details", response_model=classes.DataResponse)
 def get_grade_summary(req: classes.DataRequest):
     subset = df.copy()
     if req.districtId is not None:
@@ -348,7 +353,7 @@ def get_grade_summary(req: classes.DataRequest):
     )
 
 
-@app.post("/StudentDetails", response_model=classes.DataResponse)
+@app.post("/api/predictions/student-details", response_model=classes.DataResponse)
 def get_student_summary(req: classes.DataRequest):
     subset = df.copy()
     if req.districtId is not None:

@@ -120,45 +120,6 @@ export const StudentSelector: React.FC<Props> = ({
       schoolOptions: availableSchools,
       availableGrades: grades,
       filteredStudents: finalFilteredStudents.sort((a, b) => {
-<<<<<<< HEAD
-        if (a.schoolName !== b.schoolName) return a.schoolName.localeCompare(b.schoolName)
-        const gA = gradeOrder.indexOf(a.grade)
-        const gB = gradeOrder.indexOf(b.grade)
-        if (gA !== gB) return gA - gB
-        return a.id.localeCompare(b.id)
-      }),
-      activeFiltersCount: [selectedDistrict, selectedSchool, selectedGrade, selectedStudent].filter(Boolean).length,
-      currentApiLevel: apiLevel,
-    }
-  }, [students, selectedDistrict, selectedSchool, selectedGrade, selectedStudent])
-
-  const updateFilters = (updates: Partial<{ district: number | null; school: number | null; grade: string | null; student: Student | null }>) => {
-    const newFilters = {
-      district: updates.district !== undefined ? updates.district : selectedDistrict,
-      school: updates.school !== undefined ? updates.school : selectedSchool,
-      grade: updates.grade !== undefined ? updates.grade : selectedGrade,
-      student: updates.student !== undefined ? updates.student : selectedStudent,
-    }
-    onFiltersChange(newFilters)
-    if (updates.student !== undefined) onSelect(newFilters.student)
-  }
-
-  const clearAllFilters = () => updateFilters({ district: null, school: null, grade: null, student: null })
-  const handleDistrictSelect = (districtId: number | null) => updateFilters(districtId ? { district: districtId, school: null, grade: null, student: null } : { district: null })
-  const handleSchoolSelect = (schoolId: number | null) => updateFilters(schoolId ? { school: schoolId, grade: null, student: null } : { school: null, grade: null, student: null })
-
-  const IdDropdown = ({ label, selectedId, placeholder, options, onSelect, disabled = false, disabledReason }: { label: string; selectedId: number | null; placeholder: string; options: { id: number; name: string }[]; onSelect: (id: number | null) => void; disabled?: boolean; disabledReason?: string }) => {
-    const selectedName = selectedId ? options.find(opt => opt.id === selectedId)?.name : null
-    return (
-      <div className="space-y-2">
-        <label className={`block text-base font-semibold ${disabled ? "text-gray-400" : "text-gray-700"}`}>
-          {label}
-          {disabled && disabledReason && <span className="ml-2 text-xs text-gray-500">{`(${disabledReason})`}</span>}
-        </label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" disabled={disabled} className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${selectedId ? "ring-2 ring-blue-200 border-blue-300" : ""} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
-=======
         if (a.schoolName !== b.schoolName)
           return a.schoolName.localeCompare(b.schoolName);
         const gA = gradeOrder.indexOf(a.grade);
@@ -258,7 +219,6 @@ export const StudentSelector: React.FC<Props> = ({
                 selectedId ? "ring-2 ring-blue-200 border-blue-300" : ""
               } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
             >
->>>>>>> updated
               <span className="truncate">{selectedName || placeholder}</span>
               <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
             </Button>
@@ -267,13 +227,9 @@ export const StudentSelector: React.FC<Props> = ({
             <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
               <DropdownMenuItem onClick={() => onSelect(null)} className="text-base py-2 cursor-pointer text-gray-500">
                 <div className="flex items-center w-full">
-<<<<<<< HEAD
-                  <span className="mr-2 w-4">{!selectedId && <Check className="h-4 w-4" />}</span>
-=======
                   <span className="mr-2 w-4">
                     {!selectedId && <Check className="h-4 w-4" />}
                   </span>
->>>>>>> updated
                   {`All ${label}s`}
                 </div>
               </DropdownMenuItem>
@@ -285,15 +241,11 @@ export const StudentSelector: React.FC<Props> = ({
                 options.map(option => (
                   <DropdownMenuItem key={option.id} onClick={() => onSelect(option.id)} className="text-base py-2 cursor-pointer">
                     <div className="flex items-center w-full">
-<<<<<<< HEAD
-                      <span className="mr-2 w-4">{selectedId === option.id && <Check className="h-4 w-4" />}</span>
-=======
                       <span className="mr-2 w-4">
                         {selectedId === option.id && (
                           <Check className="h-4 w-4" />
                         )}
                       </span>
->>>>>>> updated
                       {option.name}
                     </div>
                   </DropdownMenuItem>
@@ -376,186 +328,6 @@ export const StudentSelector: React.FC<Props> = ({
     )
   }
 
-<<<<<<< HEAD
-  return (
-    <div className="space-y-6">
-      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-        <div className="flex items-center gap-2 mb-2">
-          <Info className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-semibold text-blue-800">{`Data Level: ${currentApiLevel}`}</span>
-        </div>
-        <div className="text-xs text-blue-700 mb-1">
-          {currentApiLevel === "Student" && "Individual student data"}
-          {currentApiLevel === "Grade" && "Aggregated data for specific grade"}
-          {currentApiLevel === "School" && "Aggregated data for entire school"}
-          {currentApiLevel === "District" && "Aggregated data for entire district"}
-          {currentApiLevel === "None" && "All districts combined data"}
-        </div>
-      </div>
-      {activeFiltersCount > 0 && (
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">{`${activeFiltersCount} filter${activeFiltersCount > 1 ? "s" : ""} active`}</span>
-          <Button variant="outline" size="sm" onClick={clearAllFilters} className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200">
-            <X className="h-4 w-4 mr-1" />
-            Clear All
-          </Button>
-        </div>
-      )}
-      <div className="space-y-4">
-        <IdDropdown label="District" selectedId={selectedDistrict} placeholder="Select district" options={districtOptions} onSelect={handleDistrictSelect} />
-        <IdDropdown label="School" selectedId={selectedSchool} placeholder="Select school" options={schoolOptions} onSelect={handleSchoolSelect} />
-        <GradeDropdown />
-        <StudentDropdown />
-      </div>
-      {activeFiltersCount > 0 && (
-        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Current Selection:</h4>
-          <div className="space-y-1 text-sm text-gray-600">
-            {selectedDistrict && <div>{`District: ${getDistrictName(selectedDistrict)}`}</div>}
-            {selectedSchool && <div>{`School: ${getSchoolName(selectedSchool)}`}</div>}
-            {selectedGrade && <div>{`Grade: ${selectedGrade}`}</div>}
-            {selectedStudent && <div>{`Student: ${selectedStudent.id} (${selectedStudent.grade})`}</div>}
-          </div>
-          <div className="mt-2 text-xs text-gray-500">{`Showing data for ${filteredStudents.length} student${filteredStudents.length !== 1 ? "s" : ""}`}</div>
-=======
-  const GradeDropdown = () => (
-    <div className="space-y-2">
-      <label
-        className={`block text-base font-semibold ${
-          !selectedDistrict && !selectedSchool
-            ? "text-gray-400"
-            : "text-gray-700"
-        }`}
-      >
-        Grade
-        {!selectedDistrict && !selectedSchool && (
-          <span className="ml-2 text-xs text-gray-500">
-            (Select district or school first)
-          </span>
-        )}
-      </label>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            disabled={!selectedDistrict && !selectedSchool}
-            className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
-              selectedGrade ? "ring-2 ring-blue-200 border-blue-300" : ""
-            } ${
-              !selectedDistrict && !selectedSchool
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }`}
-          >
-            <span className="truncate">{selectedGrade || "Select grade"}</span>
-            <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        {(selectedDistrict || selectedSchool) && (
-          <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[240px]">
-            <DropdownMenuItem
-              onClick={() => updateFilters({ grade: null, student: null })}
-              className="text-base py-2 cursor-pointer text-gray-500"
-            >
-              <div className="flex items-center w-full">
-                <span className="mr-2 w-4">
-                  {!selectedGrade && <Check className="h-4 w-4" />}
-                </span>
-                All Grades
-              </div>
-            </DropdownMenuItem>
-            {availableGrades.map((grade) => (
-              <DropdownMenuItem
-                key={grade}
-                onClick={() => updateFilters({ grade, student: null })}
-                className="text-base py-2 cursor-pointer"
-              >
-                <div className="flex items-center w-full">
-                  <span className="mr-2 w-4">
-                    {selectedGrade === grade && <Check className="h-4 w-4" />}
-                  </span>
-                  {grade}
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        )}
-      </DropdownMenu>
-    </div>
-  );
-
-  const StudentDropdown = () => {
-    const disabled = !selectedDistrict || !selectedSchool || !selectedGrade;
-    return (
-      <div className="space-y-2">
-        <label
-          className={`block text-base font-semibold ${
-            disabled ? "text-gray-400" : "text-gray-700"
-          }`}
-        >
-          Student
-          {disabled && (
-            <span className="ml-2 text-xs text-gray-500">
-              (Select district, school, and grade first)
-            </span>
-          )}
-        </label>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              disabled={disabled}
-              className={`w-full justify-between text-base font-normal h-10 bg-white border-[#C0D5DE] border-[1.6px] ${
-                selectedStudent ? "ring-2 ring-blue-200 border-blue-300" : ""
-              } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              <span className="truncate">
-                {selectedStudent
-                  ? `${selectedStudent.id} (${selectedStudent.grade})`
-                  : "Select student"}
-              </span>
-              <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          {!disabled && filteredStudents.length > 0 && (
-            <DropdownMenuContent className="max-h-60 overflow-y-auto w-full min-w-[280px]">
-              <DropdownMenuItem
-                onClick={() => updateFilters({ student: null })}
-                className="text-base py-2 cursor-pointer text-gray-500"
-              >
-                <div className="flex items-center w-full">
-                  <span className="mr-2 w-4">
-                    {!selectedStudent && <Check className="h-4 w-4" />}
-                  </span>
-                  No specific student
-                </div>
-              </DropdownMenuItem>
-              {filteredStudents.map((student) => (
-                <DropdownMenuItem
-                  key={student.id}
-                  onClick={() => updateFilters({ student })}
-                  className="text-base py-2 cursor-pointer"
-                >
-                  <div className="flex items-center w-full">
-                    <span className="mr-2 w-4">
-                      {selectedStudent?.id === student.id && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{student.id}</span>
-                      <span className="text-xs text-gray-500">{`${student.grade} • ${student.schoolName}`}</span>
-                    </div>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          )}
-        </DropdownMenu>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-6">
       {activeFiltersCount > 0 && (
@@ -572,7 +344,6 @@ export const StudentSelector: React.FC<Props> = ({
             <X className="h-4 w-4 mr-1" />
             Clear All
           </Button>
->>>>>>> updated
         </div>
       )}
       <div className="space-y-4">
@@ -594,10 +365,5 @@ export const StudentSelector: React.FC<Props> = ({
         <StudentDropdown />
       </div>
     </div>
-<<<<<<< HEAD
-  )
-}
-=======
   );
 };
->>>>>>> updated

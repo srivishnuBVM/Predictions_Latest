@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class YearConfig:
-    def __init__(self, data_path: str = "backend/data/Pred.csv"):
+    def __init__(self, data_path: str = "backend/data/Predictions.parquet"):
         self.data_path = data_path
         self._current_year = None
         self._predicted_year = None
@@ -19,32 +19,27 @@ class YearConfig:
     def _initialize_config(self):
         try:
             if not os.path.exists(self.data_path):
-                self._set_default_values()
                 return
+            
             df = pd.read_parquet(self.data_path)
+
             if df.empty or "SCHOOL_YEAR" not in df.columns:
-                self._set_default_values()
                 return
+            
             years = sorted(int(y) for y in df["SCHOOL_YEAR"].dropna().unique())
+
             if not years:
-                self._set_default_values()
                 return
+            
             self._min_year = min(years)
-            self._max_year = max(years)
+            self._max_year = max(years) - 1
             self._current_year = self._max_year
-            self._predicted_year = self._current_year + 1
+            self._predicted_year = self._max_year + 1
             self._year_range = list(range(self._min_year, self._predicted_year))
-        except Exception:
-            self._set_default_values()
+        except Exception as e:
+            logger.info(f'Error Reading values: {e}')
 
     
-    def _set_default_values(self):
-        self._min_year = 2019
-        self._max_year = 2024
-        self._current_year = 2024
-        self._predicted_year = 2025
-        self._year_range = list(range(2019, 2025))
-        logger.info("Using default year configuration (2019-2024, current: 2024, predicted: 2025)")
     
     @property
     def current_year(self) -> int | None:
